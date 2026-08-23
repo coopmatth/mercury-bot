@@ -25,38 +25,29 @@
   </div>
 </div>
 
-{% if devices %}
 <div class="card">
-  <div class="card-head"><span>Devices seen</span><span class="spacer"></span>
-    <span class="badge badge-soft">{{ devices|length }}</span></div>
-  <div class="list">
-    {% for device in devices %}
-    <div class="list-item">
-      <div class="li-main">
-        <div class="li-title mono text-sm">{{ device.device_id[:8] }}…</div>
-        <div class="li-sub">{{ device.pushes }} syncs · last seen {{ device.last_seen[:16]|replace('T', ' ') }}</div>
-      </div>
-    </div>
-    {% endfor %}
+  <div class="card-head">
+    <span>Rate Card &amp; Charge Codes</span>
+    <span class="spacer"></span>
+    <button class="btn btn-sm btn-outline" id="add-code-btn">+ Add Code</button>
   </div>
-</div>
-{% endif %}
-
-<div class="card">
-  <div class="card-head"><span>Rate card</span></div>
-  <div class="list">
+  <div class="list" id="rate-list">
     {% for rate in rates %}
-    <div class="list-item">
-      <div class="li-main"><div class="li-title">{{ rate.item }}</div></div>
-      <div class="text-sm text-dim nowrap">{{ rate.label }}</div>
+    <div class="list-item flex-between" data-id="{{ rate.id }}">
+      <div class="li-main">
+        <div class="li-title">{{ rate.item }}</div>
+        <div class="text-sm text-dim">{{ rate.label }}</div>
+      </div>
+      {% if not rate.tiered %}
+      <div class="flex">
+        <button class="btn btn-sm btn-ghost edit-rate-btn" data-id="{{ rate.id }}" data-name="{{ rate.item }}" data-rate="{{ rate.rate }}" data-unit="{{ rate.unit }}">Edit</button>
+        <button class="btn btn-sm btn-danger del-rate-btn" data-id="{{ rate.id }}" data-name="{{ rate.item }}">✕</button>
+      </div>
+      {% else %}
+      <span class="badge badge-soft">Tiered</span>
+      {% endif %}
     </div>
     {% endfor %}
-  </div>
-  <div class="card-body tight">
-    <p class="text-xs text-mute mb-0">
-      Rates live in <span class="mono">mercury/rates.py</span> and are mirrored in
-      <span class="mono">static/js/app.js</span> so offline totals match. Change both together.
-    </p>
   </div>
 </div>
 
@@ -81,41 +72,6 @@
       <div class="text-sm text-dim mono text-xs">{{ config.data_dir }}</div></div>
   </div>
 </div>
-
-{% if demo_mode %}
-<div class="card" style="border-color: rgba(251,191,36,.4)">
-  <div class="card-head"><span>Demo sandbox</span><span class="spacer"></span>
-    <span class="badge badge-amber">active</span></div>
-  <div class="card-body">
-    <p class="text-sm text-dim mt-0">
-      This instance uses its own database (<span class="mono">data/demo/</span>),
-      a fictional technician identity, and never contacts a mail server —
-      "sent" reports land in <span class="mono">data/demo/outbox</span> as
-      <span class="mono">.eml</span> files you can open.
-    </p>
-    <form method="post" action="/settings/demo-reset">
-      <button class="btn btn-warning btn-block" type="submit"
-              data-confirm="Wipe the demo database and regenerate fresh sample data?">
-        Reset demo data
-      </button>
-    </form>
-    <p class="text-xs text-mute mb-0 mt-1">
-      Also use “Reset local data” above on each device, so the phone's copy
-      matches the server's.
-    </p>
-  </div>
-</div>
-{% endif %}
-
-{% if ai_load_error %}
-<div class="card" style="border-color: rgba(248,113,113,.4)">
-  <div class="card-head"><span>AI scanning</span><span class="spacer"></span>
-    <span class="badge" style="background:rgba(248,113,113,.16);color:var(--danger)">unavailable</span></div>
-  <div class="card-body">
-    <p class="text-sm text-dim mt-0 mb-0">{{ ai_load_error }}</p>
-  </div>
-</div>
-{% endif %}
 
 {% if ai_available %}
 <div class="card">
@@ -168,6 +124,60 @@
     refresh();
   });
 
+  // Rate Editing
+  document.querySelectorAll('.edit-rate-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const name = window.prompt("Charge Code Name:", btn.dataset.name);
+      if (!name) return;
+      const rate = window.prompt("Rate ($):", btn.dataset.rate);
+      if (rate === null) return;
+      const unit = window.prompt("Unit ('ea' or 'ft'):", btn.dataset.unit || 'ea');
+      
+      const res = await fetch('/api/rates', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id, name: name.trim(), rate: parseFloat(rate), unit: unit.trim()})
+      });
+      if (res.ok) {
+        toast('Rate updated!', 'success');
+        setTimeout(() => location.reload(), 800);
+      }
+    });
+  });
+
+  // Add Code
+  document.getElementById('add-code-btn')?.addEventListener('click', async () => {
+    const name = window.prompt("New Charge Code Name:");
+    if (!name) return;
+    const rate = window.prompt("Rate ($):", "0.00");
+    if (rate === null) return;
+    const unit = window.prompt("Unit ('ea' or 'ft'):", "ea");
+    
+    const res = await fetch('/api/rates', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name.trim(), rate: parseFloat(rate), unit: unit.trim()})
+    });
+    if (res.ok) {
+      toast('Charge code added!', 'success');
+      setTimeout(() => location.reload(), 800);
+    }
+  });
+
+  // Delete Rate
+  document.querySelectorAll('.del-rate-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!window.confirm(`Delete charge code "${btn.dataset.name}"?`)) return;
+      const res = await fetch(`/api/rates/${btn.dataset.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast('Charge code removed.', 'success');
+        setTimeout(() => location.reload(), 800);
+      }
+    });
+  });
+
+  // Check models
   document.getElementById('check-models')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     const host = document.getElementById('model-list');

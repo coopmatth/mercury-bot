@@ -281,3 +281,29 @@ def api_email_invoice(invoice_id):
         return jsonify({"ok": True, "demo": True, "message":
                         "Demo mode — not sent. Written to data/demo/outbox."})
     return jsonify({"ok": True, "message": f"Invoice emailed to {Config.CONTRACTOR_EMAIL}."})
+    # (Keep all existing code in api.py, just append this to the very bottom)
+
+@bp.post("/ai/set-model")
+def api_set_model():
+    model_name = (request.json or {}).get("model", "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "No model name provided"}), 400
+
+    Config.GEMINI_MODEL = model_name
+    env_file = Config.DATA_DIR.parent / ".env"
+    if env_file.exists():
+        lines = env_file.read_text().splitlines()
+        found = False
+        new_lines = []
+        for line in lines:
+            if line.startswith("GEMINI_MODEL="):
+                new_lines.append(f"GEMINI_MODEL={model_name}")
+                found = True
+            else:
+                new_lines.append(line)
+        if not found:
+            new_lines.append(f"GEMINI_MODEL={model_name}")
+        env_file.write_text("\n".join(new_lines) + "\n")
+
+    return jsonify({"ok": True, "configured": Config.GEMINI_MODEL})
+

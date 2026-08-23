@@ -228,7 +228,7 @@ def api_export(kind):
         path = build_personal_workbook(start, end)
     else:
         return jsonify({"ok": False, "error": "Unknown export type."}), 404
-    return send_file(path, as_attachment=True, download_name=path.name)
+    return send_file(str(path.resolve()), as_attachment=True, download_name=path.name)
 
 
 @bp.post("/email/<kind>")
@@ -295,3 +295,36 @@ def api_email_invoice(invoice_id):
         return jsonify({"ok": True, "demo": True, "message":
                         "Demo mode — not sent. Written to data/demo/outbox."})
     return jsonify({"ok": True, "message": f"Invoice emailed to {Config.CONTRACTOR_EMAIL}."})
+
+
+@bp.post("/settings/emails")
+def api_set_emails():
+    data = request.get_json(silent=True) or {}
+    contractor_email = data.get("contractor_email")
+    your_email = data.get("your_email")
+
+    env_file = Config.DATA_DIR.parent / ".env"
+    lines = env_file.read_text().splitlines() if env_file.exists() else []
+    new_lines = []
+    
+    c_found = y_found = False
+    for line in lines:
+        if contractor_email is not None and line.startswith("CONTRACTOR_EMAIL="):
+            new_lines.append(f"CONTRACTOR_EMAIL={contractor_email}")
+            c_found = True
+        elif your_email is not None and line.startswith("YOUR_EMAIL="):
+            new_lines.append(f"YOUR_EMAIL={your_email}")
+            y_found = True
+        else:
+            new_lines.append(line)
+    
+    if contractor_email is not None and not c_found:
+        new_lines.append(f"CONTRACTOR_EMAIL={contractor_email}")
+    if your_email is not None and not y_found:
+        new_lines.append(f"YOUR_EMAIL={your_email}")
+
+    if contractor_email is not None: Config.CONTRACTOR_EMAIL = contractor_email
+    if your_email is not None: Config.YOUR_EMAIL = your_email
+
+    env_file.write_text("\n".join(new_lines) + "\n")
+    return jsonify({"ok": True})

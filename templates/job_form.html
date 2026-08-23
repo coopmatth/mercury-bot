@@ -61,6 +61,18 @@
 
   <div class="card">
     <div class="card-body">
+      <div class="section-label mt-0 mb-2">Drop Flags</div>
+      <div class="field-row mb-3">
+        <label class="btn btn-outline flex-between" style="min-height:50px; cursor:pointer;">
+          <span>Needs Buried</span>
+          <input type="checkbox" id="needs_buried" name="needs_buried" value="1" {{ 'checked' if job and job.needs_buried }} style="width:20px; height:20px;">
+        </label>
+        <label class="btn btn-outline flex-between" style="min-height:50px; cursor:pointer;">
+          <span>Needs Bore</span>
+          <input type="checkbox" id="needs_bore" name="needs_bore" value="1" {{ 'checked' if job and job.needs_bore }} style="width:20px; height:20px;">
+        </label>
+      </div>
+
       <div class="field mb-0">
         <label for="notes">Notes</label>
         <textarea id="notes" name="notes"

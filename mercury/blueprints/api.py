@@ -147,6 +147,21 @@ def api_delete_scan(scan_id):
     return jsonify({"ok": delete_scan(scan_id, device_id=_device())})
 
 
+@bp.get("/ai/models")
+def api_ai_models():
+    """What this API key can actually generate with, asked of the API.
+
+    Saves guessing at a model name when Google retires one.
+    """
+    try:
+        return jsonify({"ok": True, "configured": Config.GEMINI_MODEL,
+                        "models": ai.available_models()})
+    except ai.AIUnavailable as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Could not reach Gemini: {exc}"}), 502
+
+
 @bp.post("/parse-equipment")
 def api_parse_equipment():
     """Server-side AI parse. The client only calls this when online; offline

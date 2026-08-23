@@ -224,3 +224,122 @@ def test_email_fails_loudly_when_unconfigured(client, ctx):
     response = client.post("/api/email/personal")
     assert response.status_code == 400
     assert "not configured" in response.get_json()["error"].lower()
+
+
+def test_gemini_model_is_env_driven_not_hardcoded():
+    """Model names turn over; changing one must not need a code edit.
+
+    Run in a subprocess: Config resolves the environment at import, and
+    reloading it in-process would hand other modules a stale Config class.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+
+    from mercury.config import BASE_DIR
+
+    result = subprocess.run(
+        [sys.executable, "-c",
+         "import json;from mercury.config import Config;"
+         "print(json.dumps([Config.GEMINI_MODEL, Config.GEMINI_MAX_OUTPUT_TOKENS]))"],
+        cwd=BASE_DIR,
+        env={**os.environ, "GEMINI_MODEL": "gemini-9.9-flash",
+             "GEMINI_MAX_OUTPUT_TOKENS": "4096", "PYTHONPATH": str(BASE_DIR)},
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    model, max_tokens = json.loads(result.stdout.strip().splitlines()[-1])
+    assert model == "gemini-9.9-flash"
+    assert max_tokens == 4096
+
+
+def test_ai_stays_off_without_a_key(client, ctx):
+    """No key means the scanner falls back to OCR rather than erroring oddly."""
+    from mercury import ai
+    assert ai.available() is False
+
+    response = client.get("/api/ai/models")
+    assert response.status_code == 400
+    assert "GEMINI_API_KEY" in response.get_json()["error"]
+
+    with pytest.raises(ai.AIUnavailable, match="GEMINI_API_KEY"):
+        ai.parse_equipment_images([])
+
+
+def test_scan_endpoint_tells_the_client_to_fall_back(client, ctx):
+    """A 503 with fallback:'offline' is what makes the browser switch to OCR."""
+    import io
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(buffer, format="PNG")
+    buffer.seek(0)
+
+    response = client.post("/api/parse-equipment",
+                           data={"images": (buffer, "label.png")},
+                           content_type="multipart/form-data")
+    assert response.status_code == 503
+    assert response.get_json()["fallback"] == "offline"
+
+
+def test_a_broken_ai_sdk_does_not_take_down_the_app(client, ctx, monkeypatch):
+    """AI is an optional extra. A half-broken install of it must not stop
+    someone logging a job — including when it fails with something that is
+    not an Exception, as pyo3's PanicException does."""
+    import builtins
+
+    from mercury import ai
+    from mercury.config import Config
+
+    class Panic(BaseException):
+        """Stand-in for pyo3's PanicException (BaseException, not Exception)."""
+
+    real_import = builtins.__import__
+
+    def exploding_import(name, *args, **kwargs):
+        if name.startswith("google"):
+            raise Panic("native extension failed to load")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", exploding_import)
+    monkeypatch.setattr(Config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(ai, "_probed", False)
+    monkeypatch.setattr(ai, "_sdk", None)
+    monkeypatch.setattr(ai, "_sdk_error", None)
+
+    assert ai.available() is False
+    assert "failed to load" in (ai.load_error() or "")
+
+    # The parts that matter in the field keep working, and Settings explains why.
+    assert client.get("/").status_code == 200
+    assert client.get("/jobs/new").status_code == 200
+    assert client.get("/scanner").status_code == 200
+    assert b"failed to load" in client.get("/settings").data
+
+
+def test_the_ai_probe_runs_once_not_per_page(ctx, monkeypatch):
+    """It is called from the template context on every render."""
+    import builtins
+
+    from mercury import ai
+    from mercury.config import Config
+
+    calls = []
+    real_import = builtins.__import__
+
+    def counting_import(name, *args, **kwargs):
+        if name.startswith("google"):
+            calls.append(name)
+            raise ImportError("not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", counting_import)
+    monkeypatch.setattr(Config, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(ai, "_probed", False)
+    monkeypatch.setattr(ai, "_sdk", None)
+    monkeypatch.setattr(ai, "_sdk_error", None)
+
+    for _ in range(5):
+        ai.available()
+    assert len(calls) == 1

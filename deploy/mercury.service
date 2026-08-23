@@ -9,6 +9,9 @@
 #
 # Check on it with:  systemctl --user status mercury
 # Follow the log with:  journalctl --user -u mercury -f
+#
+# HOST and PORT come from .env — serve.py reads them, so they are not
+# repeated here. Change .env, then: systemctl --user restart mercury
 
 [Unit]
 Description=Mercury Tracker
@@ -18,7 +21,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/mercury-bot
-ExecStart=%h/mercury-bot/.venv/bin/waitress-serve --host 0.0.0.0 --port 8080 --call mercury:create_app
+ExecStart=%h/mercury-bot/.venv/bin/python %h/mercury-bot/serve.py
 Restart=on-failure
 RestartSec=5
 

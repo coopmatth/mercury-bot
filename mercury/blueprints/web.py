@@ -42,6 +42,7 @@ def _selected_week(default_to_last_completed: bool = False) -> tuple[date, date]
 def inject_globals():
     return {
         "ai_available": ai.available(),
+        "ai_load_error": ai.load_error(),
         "demo_mode": Config.DEMO,
         "email_configured": Config.email_configured() or Config.DEMO,
         "app_version": current_app.config.get("VERSION", "2.0.0"),

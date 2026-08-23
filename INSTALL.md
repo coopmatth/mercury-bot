@@ -108,7 +108,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-You should see `78 passed`. It needs no network and no browser.
+You should see `83 passed`. It needs no network and no browser.
 
 ---
 
@@ -123,13 +123,39 @@ Fill in at minimum:
 
 | Setting | What to put |
 |---|---|
-| `SECRET_KEY` | Any long random string — `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `SECRET_KEY` | A long random string, generated once and then left alone — see below |
+| `HOST` | The address to **bind**, not a hostname — see below |
 | `TECH_*` | Your name, address, phone, email — these print on the invoice |
 | `BILL_TO_*` | The contractor's details |
 | `SENDER_EMAIL` | The Gmail address the reports send from |
 | `EMAIL_PASSWORD` | A Gmail **App Password** (see below) |
 | `CONTRACTOR_EMAIL` | Where the GC's weekly sheet goes |
 | `YOUR_EMAIL` | Where your pay backup goes |
+
+### `SECRET_KEY`
+
+Yes — random, and unique to your machine. Flask uses it to sign the session
+cookie; a guessable value lets someone forge one. Generate it once:
+
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Paste it into `.env` and leave it. It never needs to change, and it never
+leaves the machine — `.env` is git-ignored.
+
+### `HOST` is a bind address, not a hostname
+
+This trips people up. `HOST` says *which network interface to listen on*, so
+it is always an IP, never a machine name and never a tailnet address:
+
+| Value | Who can reach it |
+|---|---|
+| `127.0.0.1` | Only this machine. **Use this if Tailscale fronts the app** (step 6) — Tailscale forwards to localhost, and nothing on your LAN can connect directly. |
+| `0.0.0.0` | Every interface, so any device on the Wi-Fi can connect. Only needed for plain LAN access. |
+
+Putting your Tailscale hostname or `100.x.y.z` here would either fail to bind
+or lock the app to one interface — leave it as an IP from the table.
 
 ### Gmail App Password
 
@@ -171,53 +197,55 @@ To stop it, press `Ctrl+C`.
 
 This is the part that matters — it's a field app.
 
-### Let the phone reach the machine
-
-Find the machine's LAN address:
-
-```bash
-hostname -I | awk '{print $1}'     # e.g. 192.168.1.42
-```
-
-Open the port if a firewall is running:
-
-```bash
-# Ubuntu / Debian (ufw)
-sudo ufw allow 8080/tcp
-
-# Fedora (firewalld)
-sudo firewall-cmd --add-port=8080/tcp --permanent && sudo firewall-cmd --reload
-```
-
-Now `http://192.168.1.42:8080` loads on the phone, on the same Wi-Fi.
-
 ### ⚠ Offline mode needs HTTPS
 
-Phones only allow service workers — the thing that makes the app work with no
-signal — on **HTTPS or localhost**. A plain `http://192.168.1.42:8080` address
-will load and let you browse, but it will *not* install as an app and it will
-*not* work offline. This trips everyone up, so pick one of these:
+Read this before anything else in this step. Phones only allow service
+workers — the thing that makes the app work with no signal — on **HTTPS or
+localhost**. A plain `http://192.168.1.42:8080` address will load and let you
+browse, but it will *not* install as an app and it will *not* work offline,
+which is the whole point of it.
 
-**Tailscale (recommended).** Free, private, gives you a real HTTPS
-certificate, and it also lets the phone reach the app from the field rather
-than only from your house:
+So use Tailscale. It is free, gives you a real HTTPS certificate, keeps the
+app off the public internet, and reaches your phone **from the field**, not
+just from your driveway.
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
-sudo tailscale cert "$(tailscale status --json | grep -oP '"DNSName":"\K[^"]+' | head -1 | sed 's/\.$//')"
+```
+
+Turn on **HTTPS Certificates** once at
+[login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns), then
+put Tailscale in front of the app:
+
+```bash
 sudo tailscale serve --bg 8080
 tailscale serve status        # prints your https://…ts.net address
 ```
 
-Install Tailscale on the phone, sign in to the same account, and open that
-`https://…ts.net` address. Enable **HTTPS Certificates** once in the
-[admin console](https://login.tailscale.com/admin/dns) if it asks.
+With Tailscale fronting it, keep `HOST=127.0.0.1` in `.env`. Tailscale
+forwards to localhost, so **you do not open a firewall port** and nothing on
+your LAN can reach the app directly. That is the safer arrangement.
 
-**Quick local test instead.** If you only want to try offline mode on an
-Android phone on your own Wi-Fi, tell Chrome to trust the address: open
-`chrome://flags/#unsafely-treat-insecure-origin-as-secure`, add
-`http://192.168.1.42:8080`, and relaunch. Testing only — don't leave it on.
+Install Tailscale on the phone, sign in to the same account, and open the
+`https://…ts.net` address it printed. That address works on cell data too.
+
+<details>
+<summary>Plain LAN access instead (no offline mode)</summary>
+
+If you only want to reach it from the same Wi-Fi and don't need offline:
+
+```bash
+# set HOST=0.0.0.0 in .env first, then:
+hostname -I | awk '{print $1}'          # e.g. 192.168.1.42
+sudo ufw allow 8080/tcp                 # Ubuntu/Debian
+sudo firewall-cmd --add-port=8080/tcp --permanent && sudo firewall-cmd --reload   # Fedora
+```
+
+To try offline mode over that address anyway, tell Chrome to trust it:
+`chrome://flags/#unsafely-treat-insecure-origin-as-secure` → add
+`http://192.168.1.42:8080` → relaunch. Testing only; don't leave it on.
+</details>
 
 ### Install it
 
@@ -254,6 +282,10 @@ journalctl --user -u mercury -f    # live log
 
 The unit assumes you cloned to `~/mercury-bot`. If you put it elsewhere, edit
 `WorkingDirectory` and `ExecStart` in `~/.config/systemd/user/mercury.service`.
+
+`HOST` and `PORT` come from `.env` — the unit runs `serve.py`, which reads
+them, so they aren't duplicated. Change `.env`, then
+`systemctl --user restart mercury`.
 
 ---
 
@@ -312,6 +344,12 @@ Password (step 4). 2-Step Verification has to be on first.
 The OCR engine is ~10 MB and loads in the background on first visit. Open the
 Scanner page once with signal and give it a minute; after that it's cached
 and works offline.
+
+**The AI scanner fails, or says the model was rejected**
+Google retires Gemini model names regularly. Go to **Settings → AI model →
+Check available models** — it asks your key what it can actually use right
+now. Put one of those names in `GEMINI_MODEL` in `.env` and restart. The
+scanner keeps working on on-device OCR in the meantime.
 
 **Numbers on the phone don't match the machine**
 The phone keeps its own copy and syncs. Check the pill in the top-right — if

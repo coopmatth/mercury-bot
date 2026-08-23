@@ -156,8 +156,18 @@ static/js/
   hydrate.js      re-renders lists from the local replica
   scanner.js      AI + offline OCR label reading
   sw.js           service worker
-tests/            78 tests, no network required
+tests/            83 tests, no network required
 ```
+
+### The AI model name is configuration, not code
+
+Google retires Gemini model names regularly, so `GEMINI_MODEL` lives in
+`.env` and **Settings → AI model → Check available models** asks your key
+what it can actually use today. Nothing in the source hardcodes a list.
+
+The SDK is an optional extra (`requirements-ai.txt`). If it is missing — or
+installed but broken — the app says so in Settings and keeps working on
+on-device OCR; it never blocks job logging.
 
 ### Pay rules
 
@@ -187,7 +197,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-78 tests. Covers the tier boundaries in the pay math, the sync contract (replay,
+83 tests. Covers the tier boundaries in the pay math, the sync contract (replay,
 conflicts, tombstones, delta pulls, partial-batch failures), week boundaries,
 invoice assembly, and the export pipeline.
 

@@ -1,14 +1,4 @@
-"""Weekly spreadsheets, rendered on demand from the database.
-
-The original app treated the workbooks as its storage, which meant a job was
-only as durable as the file it landed in. Here they are pure exports: the
-database is authoritative and a workbook is regenerated whenever it is
-downloaded or emailed, so it can never drift out of step with the app.
-
-Two flavours are produced, matching the original:
-  * contractor — quantities only, no pay figures
-  * personal   — the same rows plus per-job pay and a totals block
-"""
+"""Weekly spreadsheets, rendered on demand from the database with dynamic charge codes."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -20,7 +10,7 @@ from openpyxl.utils import get_column_letter
 
 from ..config import Config
 from ..models import list_custom_items, list_jobs, week_label, week_summary
-from ..rates import ITEM_LIST, PAY_RATES, rate_label
+from ..rates import get_item_list, rate_label
 
 NAVY = "0F172A"
 SLATE = "1E293B"
@@ -47,16 +37,16 @@ def _style_header_row(ws, row: int, ncols: int, fill: str = SLATE) -> None:
 
 def _build(start: date, end: date, include_pay: bool) -> openpyxl.Workbook:
     summary = week_summary(start, end)
+    item_list = get_item_list()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Weekly Installations"
 
-    headers = ["Date", "Address", "Order Number"] + ITEM_LIST + ["Notes"]
+    headers = ["Date", "Address", "Order Number"] + item_list + ["Notes"]
     if include_pay:
         headers.append("Job Total")
     ncols = len(headers)
 
-    # Title banner
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
     title = ws.cell(row=1, column=1, value="Mercury Installation Tracker")
     title.font = _title_font
@@ -72,8 +62,6 @@ def _build(start: date, end: date, include_pay: bool) -> openpyxl.Workbook:
     ws.cell(row=3, column=4, value="Generated:").font = _label_font
     ws.cell(row=3, column=5, value=datetime.now().strftime("%m/%d/%Y %I:%M %p"))
 
-    # Header row lives on row 5, exactly where the original put it, so any
-    # downstream habit of reading row 5 still works.
     for col, name in enumerate(headers, 1):
         ws.cell(row=5, column=col, value=name)
     _style_header_row(ws, 5, ncols)
@@ -84,10 +72,10 @@ def _build(start: date, end: date, include_pay: bool) -> openpyxl.Workbook:
         ws.cell(row=row_num, column=1, value=job["work_date"])
         ws.cell(row=row_num, column=2, value=job["address"])
         ws.cell(row=row_num, column=3, value=job["order_number"])
-        for idx, item in enumerate(ITEM_LIST):
+        for idx, item in enumerate(item_list):
             qty = job["items"].get(item)
             ws.cell(row=row_num, column=idx + 4, value=qty if qty else None)
-        ws.cell(row=row_num, column=len(ITEM_LIST) + 4, value=job["notes"] or "")
+        ws.cell(row=row_num, column=len(item_list) + 4, value=job["notes"] or "")
         if include_pay:
             cell = ws.cell(row=row_num, column=ncols, value=job["total"])
             cell.number_format = _money_fmt
@@ -95,11 +83,10 @@ def _build(start: date, end: date, include_pay: bool) -> openpyxl.Workbook:
             ws.cell(row=row_num, column=col).border = _border
         row_num += 1
 
-    # Totals row
     if row_num > 6:
         total_row = row_num
         ws.cell(row=total_row, column=1, value="TOTALS").font = _label_font
-        for idx, item in enumerate(ITEM_LIST):
+        for idx, item in enumerate(item_list):
             col = idx + 4
             letter = get_column_letter(col)
             cell = ws.cell(row=total_row, column=col,
@@ -116,7 +103,7 @@ def _build(start: date, end: date, include_pay: bool) -> openpyxl.Workbook:
             c.fill = PatternFill("solid", fgColor="E2E8F0")
             c.border = _border
 
-    widths = [12, 34, 16] + [16] * len(ITEM_LIST) + [40]
+    widths = [12, 34, 16] + [16] * len(item_list) + [40]
     if include_pay:
         widths.append(14)
     for i, width in enumerate(widths, 1):
@@ -124,7 +111,7 @@ def _build(start: date, end: date, include_pay: bool) -> openpyxl.Workbook:
 
     _add_custom_sheet(wb, start, end, include_pay)
     if include_pay:
-        _add_summary_sheet(wb, summary)
+        _add_summary_sheet(wb, summary, item_list)
     return wb
 
 
@@ -154,7 +141,7 @@ def _add_custom_sheet(wb, start: date, end: date, include_pay: bool) -> None:
         ws.column_dimensions[get_column_letter(i)].width = width
 
 
-def _add_summary_sheet(wb, summary: dict) -> None:
+def _add_summary_sheet(wb, summary: dict, item_list: list[str]) -> None:
     ws = wb.create_sheet("Pay Summary")
     ws.column_dimensions["A"].width = 34
     ws.column_dimensions["B"].width = 14
@@ -173,7 +160,7 @@ def _add_summary_sheet(wb, summary: dict) -> None:
     _style_header_row(ws, 3, 4)
 
     row = 4
-    for item in ITEM_LIST:
+    for item in item_list:
         qty = summary["task_counts"].get(item, 0)
         if not qty:
             continue
@@ -211,12 +198,10 @@ def _write(wb, filename: str) -> Path:
 
 
 def build_contractor_workbook(start: date, end: date) -> Path:
-    """Quantities only — the sheet the general contractor receives."""
     return _write(_build(start, end, include_pay=False),
                   f"Mercury Install Tracker {week_label(start, end)}.xlsx")
 
 
 def build_personal_workbook(start: date, end: date) -> Path:
-    """The same week with pay figures, for the technician's own records."""
     return _write(_build(start, end, include_pay=True),
                   f"Personal Pay Report {week_label(start, end)}.xlsx")

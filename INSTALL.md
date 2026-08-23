@@ -108,7 +108,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-You should see `72 passed`. It needs no network and no browser.
+You should see `78 passed`. It needs no network and no browser.
 
 ---
 

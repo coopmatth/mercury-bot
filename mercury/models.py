@@ -28,6 +28,16 @@ def week_bounds(for_date: date | None = None) -> tuple[date, date]:
     return start, start + timedelta(days=6)
 
 
+def last_completed_week(for_date: date | None = None) -> tuple[date, date]:
+    """The most recent pay week that has finished.
+
+    Invoices bill a closed week, so this is what the Reports screen bills by
+    default: on any day of the week beginning 08/23, that is 08/16 - 08/22.
+    """
+    start = week_start(for_date) - timedelta(days=7)
+    return start, start + timedelta(days=6)
+
+
 def week_label(start: date, end: date) -> str:
     return f"{start.strftime('%m-%d-%y')}_to_{end.strftime('%m-%d-%y')}"
 
@@ -51,7 +61,10 @@ def recent_weeks(limit: int = 12) -> list[dict]:
         "UNION SELECT work_date FROM custom_items WHERE deleted = 0"
     ).fetchall()
     starts = {week_start(parse_date(r["work_date"])) for r in rows}
+    # Always offer the current week and the one being invoiced, even if
+    # neither has any work logged against it yet.
     starts.add(week_start())
+    starts.add(last_completed_week()[0])
     ordered = sorted(starts, reverse=True)[:limit]
     return [
         {

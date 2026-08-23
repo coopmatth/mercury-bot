@@ -14,17 +14,28 @@ from flask import (Blueprint, current_app, flash, jsonify, make_response,
 from .. import ai, invoicing
 from ..config import BASE_DIR, Config
 from ..db import backup_to, current_seq
-from ..models import (list_custom_items, list_jobs, list_scans, parse_date,
-                      recent_weeks, week_bounds, week_summary)
+from ..models import (last_completed_week, list_custom_items, list_jobs,
+                      list_scans, parse_date, recent_weeks, week_bounds,
+                      week_summary)
 from ..rates import ITEM_LIST, rate_table
 from ..sync import devices
 
 bp = Blueprint("web", __name__)
 
 
-def _selected_week() -> tuple[date, date]:
+def _selected_week(default_to_last_completed: bool = False) -> tuple[date, date]:
+    """The week the screen is showing.
+
+    Most screens track the current week. Reports and invoices bill a week
+    that has closed, so they start on the last completed one unless the user
+    picks another.
+    """
     start_arg = request.args.get("week")
-    return week_bounds(parse_date(start_arg) if start_arg else None)
+    if start_arg:
+        return week_bounds(parse_date(start_arg))
+    if default_to_last_completed:
+        return last_completed_week()
+    return week_bounds()
 
 
 @bp.app_context_processor
@@ -99,20 +110,20 @@ def photos_page():
 
 @bp.get("/reports")
 def reports_page():
-    start, end = _selected_week()
+    start, end = _selected_week(default_to_last_completed=True)
     return render_template(
         "reports.html",
         summary=week_summary(start, end),
         weeks=recent_weeks(),
         selected_week=start.isoformat(),
         invoices=invoicing.list_invoices(),
-        default_due=invoicing.default_due_date().strftime("%m/%d/%y"),
+        default_due=invoicing.default_due_date(end).strftime("%m/%d/%y"),
     )
 
 
 @bp.post("/invoice/mercury")
 def create_mercury_invoice():
-    start, end = _selected_week()
+    start, end = _selected_week(default_to_last_completed=True)
     extra = invoicing.parse_line_inputs(
         request.form.getlist("desc[]"),
         request.form.getlist("qty[]"),
@@ -131,7 +142,7 @@ def create_mercury_invoice():
 
 @bp.post("/invoice/remc")
 def create_remc_invoice():
-    start, end = _selected_week()
+    start, end = _selected_week(default_to_last_completed=True)
     extra = invoicing.parse_line_inputs(
         request.form.getlist("desc[]"),
         request.form.getlist("qty[]"),

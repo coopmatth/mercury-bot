@@ -123,23 +123,53 @@ def test_invoice_refuses_to_bill_an_empty_week(ctx):
         build_mercury_invoice(start, end)
 
 
-def test_terms_are_net_14_from_the_invoice_date(ctx):
+def test_terms_are_net_14_from_the_close_of_the_billed_week(ctx):
+    """The week ending Sat 08/22/26 closed Fri 08/21/26 and is due Fri 09/04/26."""
     from mercury.invoicing import NET_TERMS_DAYS, default_due_date
     assert NET_TERMS_DAYS == 14
-    assert default_due_date(date(2026, 8, 23)) == date(2026, 9, 6)
-    assert default_due_date(date(2026, 12, 26)) == date(2027, 1, 9)   # crosses a year
-    assert (default_due_date() - date.today()).days == 14
+    assert default_due_date(date(2026, 8, 22)) == date(2026, 9, 4)
+    assert default_due_date(date(2026, 8, 29)) == date(2026, 9, 11)
+    assert default_due_date(date(2026, 12, 26)) == date(2027, 1, 8)  # crosses a year
 
 
-def test_generated_invoice_is_due_14_days_after_issue(ctx):
+@pytest.mark.parametrize("week_end", [
+    date(2026, 1, 3), date(2026, 2, 28), date(2026, 8, 22),
+    date(2026, 12, 26), date(2027, 7, 31),
+])
+def test_due_date_always_lands_on_a_friday(ctx, week_end):
+    from mercury.invoicing import default_due_date
+    due = default_due_date(week_end)
+    assert due.weekday() == 4, f"{due} is a {due.strftime('%A')}"
+    assert 13 <= (due - week_end).days <= 14
+
+
+def test_due_date_does_not_move_with_the_day_you_raise_the_invoice(ctx):
+    """Terms run from the billed week, not from whenever the PDF is made."""
     from datetime import datetime
     from mercury.invoicing import build_mercury_invoice
-    start, end = week_bounds()
+    from mercury.models import last_completed_week
+    start, end = last_completed_week()
     save_job({"work_date": start.isoformat(), "items": {"Installation": 1}})
 
     invoice = build_mercury_invoice(start, end)
     due = datetime.strptime(invoice["due_date"], "%m/%d/%y").date()
-    assert (due - date.today()).days == 14
+    assert due.weekday() == 4
+    assert (due - end).days == 13
+
+
+def test_reports_bills_the_week_that_just_closed(client, ctx):
+    """On any day of the current week, the invoice covers the previous one."""
+    from mercury.models import last_completed_week
+    start, end = last_completed_week()
+    save_job({"work_date": start.isoformat(), "address": "Closed week",
+              "items": {"Installation": 1}})
+    save_job({"work_date": week_bounds()[0].isoformat(), "address": "In progress",
+              "items": {"Installation": 9}})
+
+    body = client.get("/reports").data.decode()
+    assert start.strftime("%b %d") in body
+    # The in-progress week's larger total must not be what is offered to bill.
+    assert "$990.00" not in body
 
 
 def test_exports_download_as_real_workbooks(client, ctx):

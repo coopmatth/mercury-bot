@@ -17,7 +17,7 @@ yourself — no accounts, no subscriptions, no cloud bill.
 | **Equipment scanner** | Reads ONT/gateway labels from photos — AI online, on-device OCR offline |
 | **Photo compressor** | Shrinks job photos before upload, entirely on the phone |
 | **Weekly spreadsheets** | Contractor sheet (quantities only) and pay sheet (with totals) |
-| **Invoices** | Mercury and REMC PDFs on net-14 terms, emailed straight to the contractor |
+| **Invoices** | Mercury and REMC PDFs for the completed week on net-14 terms, emailed to the contractor |
 | **Dashboard** | Today, this week, earnings by day, work completed, per-job averages |
 
 ### Everything works offline
@@ -156,7 +156,7 @@ static/js/
   hydrate.js      re-renders lists from the local replica
   scanner.js      AI + offline OCR label reading
   sw.js           service worker
-tests/            72 tests, no network required
+tests/            78 tests, no network required
 ```
 
 ### Pay rules
@@ -164,7 +164,13 @@ tests/            72 tests, no network required
 * Aerial drops are tiered, not linear: **$75** to 300 ft, **$150** to 600 ft,
   then **$150 plus $0.50 for every foot past 601** — so a 601 ft drop is
   exactly $150 and a 780 ft drop is $239.50.
-* Invoice terms are **net 14**: due fourteen days after the invoice date.
+* Invoice terms are **net 14 from the close of the billed week**, not from the
+  day the PDF is made — so the due date never moves depending on when you get
+  around to raising it, and always lands on a Friday. The week ending Sat
+  08/22/26 closed on Fri 08/21/26 and is due Fri 09/04/26.
+* Invoices bill a **completed** week. The dashboard tracks the current week
+  live; Reports defaults to the week that just closed, which is the one you
+  are billing.
 
 ### Rates live in two places, on purpose
 
@@ -181,7 +187,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-72 tests. Covers the tier boundaries in the pay math, the sync contract (replay,
+78 tests. Covers the tier boundaries in the pay math, the sync contract (replay,
 conflicts, tombstones, delta pulls, partial-batch failures), week boundaries,
 invoice assembly, and the export pipeline.
 

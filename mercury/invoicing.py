@@ -10,13 +10,29 @@ from .models import (custom_items_as_lines, invoice_lines, list_custom_items,
                      parse_date, week_bounds)
 
 
-# Payment terms: net 14 — due fourteen days after the invoice is issued.
+# Payment terms: net 14, counted from the end of the work week being billed
+# rather than from the day the invoice happens to be raised.
 NET_TERMS_DAYS = 14
+WORK_WEEK_END_WEEKDAY = 4   # Friday, in date.weekday() terms
 
 
-def default_due_date(issued: date | None = None) -> date:
-    """Net 14 from the invoice date."""
-    return (issued or date.today()) + timedelta(days=NET_TERMS_DAYS)
+def work_week_end(week_end: date) -> date:
+    """The Friday the billed work week closed.
+
+    The pay week runs Sunday-Saturday, but terms run from the Friday, so the
+    due date always lands on a Friday two weeks out.
+    """
+    return week_end - timedelta(
+        days=(week_end.weekday() - WORK_WEEK_END_WEEKDAY) % 7)
+
+
+def default_due_date(week_end: date) -> date:
+    """Net 14 from the close of the billed week.
+
+    A week ending Saturday 08/22/26 closed on Friday 08/21/26 and is due
+    Friday 09/04/26.
+    """
+    return work_week_end(week_end) + timedelta(days=NET_TERMS_DAYS)
 
 
 def _next_number(kind: str, issued: date) -> str:
@@ -58,7 +74,7 @@ def build_mercury_invoice(start: date, end: date,
         raise ValueError("There is nothing to invoice for this week yet.")
 
     issued = date.today()
-    due = due_date or default_due_date(issued).strftime("%m/%d/%y")
+    due = due_date or default_due_date(end).strftime("%m/%d/%y")
     number = _next_number("mercury", issued)
     filename = f"Invoice_{start.strftime('%m-%d-%y')}_to_{end.strftime('%m-%d-%y')}.pdf"
 
@@ -94,7 +110,7 @@ def build_remc_invoice(extra_items: list[dict] | None = None,
 
     total = round(sum(l["amount"] for l in lines), 2)
     issued = date.today()
-    due = due_date or default_due_date(issued).strftime("%m/%d/%y")
+    due = due_date or default_due_date(end).strftime("%m/%d/%y")
     number = _next_number("remc", issued)
     filename = f"REMC_Invoice_{issued.strftime('%Y-%m-%d')}.pdf"
 

@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-title">
   <h1>Reports &amp; invoices</h1>
-  <p>{{ summary.range_label }} · {{ summary.weekly|money }} earned</p>
+  <p>Billing <strong>{{ summary.range_label }}</strong> · {{ summary.weekly|money }} earned</p>
 </div>
 
 {% if weeks|length > 1 %}
@@ -53,6 +53,24 @@
 </div>
 
 <div class="section-label">Generate an invoice</div>
+
+<div class="card">
+  <div class="card-body tight">
+    <div class="flex-between">
+      <span class="text-sm text-dim">Billing period</span>
+      <strong class="text-sm">{{ summary.range_label }}</strong>
+    </div>
+    <div class="divider" style="margin:10px 0"></div>
+    <div class="flex-between">
+      <span class="text-sm text-dim">Due (net 14)</span>
+      <strong class="text-sm text-amber">{{ default_due }}</strong>
+    </div>
+    <p class="text-xs text-mute mb-0 mt-1">
+      Terms run from the Friday the work week closed, so the due date always
+      lands on a Friday. Pick another week above to bill it instead.
+    </p>
+  </div>
+</div>
 
 <div class="card">
   <div class="card-head"><span>Mercury invoice</span><span class="spacer"></span>

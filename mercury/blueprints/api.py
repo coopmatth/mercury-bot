@@ -328,3 +328,12 @@ def api_set_emails():
 
     env_file.write_text("\n".join(new_lines) + "\n")
     return jsonify({"ok": True})
+    # (Keep all existing code in api.py, just append this to the very bottom)
+
+@bp.delete("/invoice/<invoice_id>")
+def api_delete_invoice(invoice_id):
+    success = invoicing.delete_invoice(invoice_id)
+    if success:
+        return jsonify({"ok": True, "message": "Invoice permanently deleted."})
+    return jsonify({"ok": False, "error": "Invoice not found."}), 404
+

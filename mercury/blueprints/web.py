@@ -31,7 +31,8 @@ def _selected_week() -> tuple[date, date]:
 def inject_globals():
     return {
         "ai_available": ai.available(),
-        "email_configured": Config.email_configured(),
+        "demo_mode": Config.DEMO,
+        "email_configured": Config.email_configured() or Config.DEMO,
         "app_version": current_app.config.get("VERSION", "2.0.0"),
     }
 
@@ -193,6 +194,17 @@ def settings_page():
 def download_backup():
     path = backup_to(Config.EXPORT_DIR / f"mercury-backup-{date.today().isoformat()}.db")
     return send_file(path, as_attachment=True, download_name=path.name)
+
+
+@bp.post("/settings/demo-reset")
+def reset_demo():
+    if not Config.DEMO:
+        flash("Demo reset is only available in demo mode.", "danger")
+        return redirect(url_for("web.settings_page"))
+    from ..demo import reset
+    flash(f"Demo data reset — {reset()} sample jobs regenerated. "
+          "Clear the app's local data on each device to match.", "success")
+    return redirect(url_for("web.settings_page"))
 
 
 @bp.get("/offline")

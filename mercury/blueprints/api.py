@@ -235,6 +235,10 @@ def api_email(kind):
             return jsonify({"ok": False, "error": "Unknown report type."}), 404
     except EmailError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
+    if Config.DEMO:
+        return jsonify({"ok": True, "demo": True, "message":
+                        f"Demo mode — not sent. Written to data/demo/outbox "
+                        f"as it would have gone to {recipient}."})
     return jsonify({"ok": True, "message": f"Sent to {recipient}."})
 
 
@@ -258,4 +262,7 @@ def api_email_invoice(invoice_id):
     except EmailError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     invoicing.mark_emailed(invoice_id)
+    if Config.DEMO:
+        return jsonify({"ok": True, "demo": True, "message":
+                        "Demo mode — not sent. Written to data/demo/outbox."})
     return jsonify({"ok": True, "message": f"Invoice emailed to {Config.CONTRACTOR_EMAIL}."})

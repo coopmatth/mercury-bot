@@ -25,6 +25,9 @@ def create_app(config: type[Config] = Config) -> Flask:
     from .db import close_db, init_db
     with app.app_context():
         init_db()
+        if config.DEMO:
+            from .demo import seed_if_empty
+            seed_if_empty()
     app.teardown_appcontext(close_db)
 
     from .blueprints.api import bp as api_bp

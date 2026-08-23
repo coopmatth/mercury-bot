@@ -34,6 +34,13 @@
   </div>
 </header>
 
+{% if demo_mode %}
+<div class="demo-banner">
+  <span class="demo-dot"></span>
+  <span><strong>Demo mode</strong> — sample data, and email is written to disk instead of sent.</span>
+</div>
+{% endif %}
+
 <main class="container">
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}

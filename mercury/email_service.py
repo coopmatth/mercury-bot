@@ -9,6 +9,7 @@ from __future__ import annotations
 import mimetypes
 import smtplib
 import ssl
+from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -48,15 +49,16 @@ def send_email(recipient: str, subject: str, body_text: str,
                attachments: list[Path] | None = None,
                body_html: str | None = None) -> None:
     """Send one message. Raises EmailError with a usable reason on failure."""
-    if not Config.email_configured():
+    if not recipient:
+        raise EmailError("No recipient address configured.")
+    if not Config.DEMO and not Config.email_configured():
         raise EmailError(
             "Email is not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env."
         )
-    if not recipient:
-        raise EmailError("No recipient address configured.")
 
     msg = EmailMessage()
-    msg["From"] = f"{Config.TECH_NAME} <{Config.SENDER_EMAIL}>"
+    sender = Config.SENDER_EMAIL or (Config.TECH_EMAIL if Config.DEMO else "")
+    msg["From"] = f"{Config.TECH_NAME} <{sender}>"
     msg["To"] = recipient
     msg["Subject"] = subject
     msg.set_content(body_text)
@@ -72,6 +74,12 @@ def send_email(recipient: str, subject: str, body_text: str,
         msg.add_attachment(path.read_bytes(), maintype=maintype,
                            subtype=subtype, filename=path.name)
 
+    if Config.DEMO:
+        # Sandbox: write the message to disk so it can be inspected, and do
+        # not open a connection to anything.
+        _save_to_outbox(msg, subject)
+        return
+
     try:
         context = ssl.create_default_context()
         with smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT, timeout=30) as server:
@@ -85,6 +93,15 @@ def send_email(recipient: str, subject: str, body_text: str,
         ) from exc
     except Exception as exc:
         raise EmailError(f"Could not send email: {exc}") from exc
+
+
+def _save_to_outbox(msg: EmailMessage, subject: str) -> None:
+    """Demo mode's stand-in for sending: a real .eml file, openable in any
+    mail client, written to data/demo/outbox."""
+    Config.ensure_dirs()
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    safe = "".join(c if c.isalnum() or c in " -_" else "" for c in subject)[:60].strip()
+    (Config.OUTBOX_DIR / f"{stamp} {safe or 'message'}.eml").write_bytes(msg.as_bytes())
 
 
 def send_report(recipient: str, title: str, intro: str,

@@ -33,6 +33,32 @@ rather than failing.
 
 ---
 
+## Try it first (sandbox)
+
+```bash
+git clone <this repo> && cd mercury-bot
+pip install -r requirements.txt
+python demo.py
+```
+
+That prints two addresses — one for this computer, one for your phone on the
+same network. Open the phone one, **Add to Home Screen**, then switch on
+airplane mode and log a job: it saves, prices and lists offline, and syncs
+itself when you come back.
+
+The sandbox is walled off from real use:
+
+| | |
+|---|---|
+| **Separate database** | `data/demo/mercury-demo.db` — your real data is never opened |
+| **Fictional identity** | Invoices bill "Alex Rivera" to a made-up contractor; no personal details appear |
+| **No email is sent** | Messages are written to `data/demo/outbox` as `.eml` files you can open — SMTP is never contacted, even if credentials are configured |
+| **Sample data** | Two weeks of realistic jobs, custom items on both invoices, and a saved equipment scan |
+| **Resettable** | Settings → *Reset demo data* regenerates it |
+
+Nothing about demo mode leaks into normal use: it only turns on with
+`MERCURY_DEMO=1`, which `demo.py` sets for you.
+
 ## Setup
 
 ```bash

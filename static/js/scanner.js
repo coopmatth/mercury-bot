@@ -1,13 +1,3 @@
-/* Equipment label scanner.
- *
- * Online: the photos go to the server, which asks Gemini to read them.
- * Offline: Tesseract runs in the browser against locally vendored assets —
- * no CDN, no network — and the same field-extraction heuristics that the
- * original app used pull FSANs, MACs and serials out of the raw OCR text.
- *
- * Either path produces the identical output block, because the technician
- * pastes it into a system that expects those exact lines. */
-
 import { saveScan, store, toast, buzz } from './app.js';
 
 const TEMPLATE = ({ ontMac = '', mtaMac = '', ontFsan = '', serial = '',
@@ -48,8 +38,6 @@ const els = {
 
 let selected = [];
 
-/* ------------------------------------------------------------- engine UI */
-
 function updateEngine() {
   const online = navigator.onLine;
   els.engine.className = online ? 'pill pill-online' : 'pill pill-offline';
@@ -71,8 +59,6 @@ function hideProgress() {
   els.progressBar.style.width = '0%';
 }
 
-/* ------------------------------------------------------- file selection */
-
 els.files.addEventListener('change', () => {
   selected = [...els.files.files];
   els.thumbs.innerHTML = '';
@@ -92,10 +78,6 @@ els.files.addEventListener('change', () => {
     : 'Read labels';
 });
 
-/* ------------------------------------------------- offline OCR pipeline */
-
-/** Upscale and hard-threshold the photo. Etched hardware labels read far
- *  better as high-contrast black on white than as a raw camera frame. */
 async function preprocess(file) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(2.5, Math.max(1, 1800 / Math.max(bitmap.width, bitmap.height)));
@@ -111,8 +93,6 @@ async function preprocess(file) {
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const px = image.data;
 
-  // Mean luminance as the threshold: labels are photographed under wildly
-  // different light, so a fixed cutoff washes out or blacks out.
   let sum = 0;
   for (let i = 0; i < px.length; i += 4) {
     sum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
@@ -129,10 +109,6 @@ async function preprocess(file) {
   return canvas;
 }
 
-/** Pull the fields out of raw OCR text.
- *  OCR reliably confuses O/0, I/1 and Q/0 on these labels, so normalise
- *  before matching; FSANs are CXNK + 8 hex, MACs are 12 hex, and serials
- *  are the long all-digit runs. */
 function extractFields(rawText) {
   const upper = rawText.toUpperCase();
   const isOnt = /\bONT\b|PON|1101|803/.test(upper);
@@ -147,7 +123,6 @@ function extractFields(rawText) {
   return { isOnt, isRouter, fsans, serials, macs };
 }
 
-/** Merge per-image findings into one filled template. */
 function assemble(findings) {
   const ont = { fsans: [], macs: [], serials: [] };
   const router = { fsans: [], macs: [] };
@@ -167,8 +142,6 @@ function assemble(findings) {
   unknown.fsans = uniq(unknown.fsans); unknown.macs = uniq(unknown.macs);
   unknown.serials = uniq(unknown.serials);
 
-  // Photos that named neither device fill the gaps, ONT first — an ONT
-  // carries two MACs (ONU and MTA), a gateway carries one.
   if (!ont.fsans.length && unknown.fsans.length) ont.fsans.push(unknown.fsans.shift());
   if (!router.fsans.length && unknown.fsans.length) router.fsans.push(unknown.fsans.shift());
   while (ont.macs.length < 2 && unknown.macs.length) ont.macs.push(unknown.macs.shift());
@@ -201,7 +174,6 @@ async function runOfflineOcr() {
   });
 
   try {
-    // Sparse text: these labels are scattered key/value pairs, not paragraphs.
     await worker.setParameters({
       tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
       tessedit_char_whitelist:
@@ -221,13 +193,30 @@ async function runOfflineOcr() {
   }
 }
 
-/* ------------------------------------------------------- online AI path */
+async function compressForAI(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+}
 
 async function runAiParse() {
-  progress('Sending photos to the AI reader…', 0.3);
+  progress('Compressing photos for fast upload…', 0.1);
   const body = new FormData();
-  selected.forEach((file) => body.append('images', file));
+  
+  for (let i = 0; i < selected.length; i++) {
+    const blob = await compressForAI(selected[i]);
+    body.append('images', blob, selected[i].name);
+  }
 
+  progress('Sending photos to the AI reader…', 0.4);
   const response = await fetch('/api/parse-equipment', { method: 'POST', body });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.ok) {
@@ -236,8 +225,6 @@ async function runAiParse() {
   }
   return data.text;
 }
-
-/* ---------------------------------------------------------------- scan */
 
 els.scan.addEventListener('click', async () => {
   if (!selected.length) return;
@@ -253,8 +240,6 @@ els.scan.addEventListener('click', async () => {
         text = await runAiParse();
         source = 'AI reader';
       } catch (error) {
-        // A server or quota problem is not a dead end: the offline reader
-        // is right here and works on the same photos.
         toast(`${error.message} Falling back to on-device OCR.`, 'warning', 5000);
         text = await runOfflineOcr();
       }
@@ -275,15 +260,11 @@ els.scan.addEventListener('click', async () => {
   }
 });
 
-/* --------------------------------------------------------- copy / save */
-
 els.copy.addEventListener('click', async () => {
   const text = els.output.value;
   try {
     await navigator.clipboard.writeText(text);
   } catch (e) {
-    // Clipboard API needs a secure context; select the text so a long-press
-    // copy still works on a plain-HTTP LAN address.
     els.output.select();
     document.execCommand('copy');
   }
@@ -303,8 +284,6 @@ els.saveScan.addEventListener('click', async () => {
   toast('Scan saved to this device.', 'success');
   renderHistory();
 });
-
-/* -------------------------------------------------------------- history */
 
 async function renderHistory() {
   const scans = (await store.all('equipment_scans'))
@@ -338,8 +317,6 @@ async function renderHistory() {
 renderHistory();
 document.addEventListener('mercury:synced', renderHistory);
 
-/* Warm the OCR engine while there is still signal, so the first offline
- * scan does not stall waiting on assets. */
 if ('requestIdleCallback' in window) {
   requestIdleCallback(() => {
     ['worker.min.js', 'eng.traineddata.gz', 'tesseract-core-simd-lstm.wasm.js']

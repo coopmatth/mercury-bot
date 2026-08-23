@@ -1,11 +1,12 @@
 """JSON API."""
 from __future__ import annotations
 
+import re
 from datetime import date
 from flask import Blueprint, jsonify, request, send_file
 
 from .. import ai, invoicing
-from ..config import Config
+from ..config import Config, update_env_file
 from ..db import current_seq
 from ..email_service import EmailError, send_report
 from ..exports import build_contractor_workbook, build_personal_workbook
@@ -17,6 +18,11 @@ from ..rates import (ITEM_LIST, calculate_job_total, rate_table, get_item_list,
 from ..sync import devices, sync
 
 bp = Blueprint("api", __name__, url_prefix="/api")
+
+# Whitelists, not blacklists: a value has to match the expected shape, so
+# there's no character set left to smuggle a newline or an "=" through.
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+_MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 
 
 def _device() -> str:
@@ -163,25 +169,21 @@ def api_ai_models():
 
 @bp.post("/ai/set-model")
 def api_set_model():
-    model_name = (request.json or {}).get("model", "").strip()
+    model_name = (request.json or {}).get("model", "")
+    if not isinstance(model_name, str):
+        return jsonify({"ok": False, "error": "Model name must be text."}), 400
+    model_name = model_name.strip()
     if not model_name:
         return jsonify({"ok": False, "error": "No model name provided"}), 400
+    if not _MODEL_NAME_RE.match(model_name):
+        return jsonify({"ok": False, "error":
+                        "That doesn't look like a Gemini model name — letters, "
+                        "digits, dots and hyphens only."}), 400
 
+    # Persist first: if the write fails, Config and .env must not disagree
+    # about which model is configured.
+    update_env_file({"GEMINI_MODEL": model_name})
     Config.GEMINI_MODEL = model_name
-    env_file = Config.DATA_DIR.parent / ".env"
-    if env_file.exists():
-        lines = env_file.read_text().splitlines()
-        found = False
-        new_lines = []
-        for line in lines:
-            if line.startswith("GEMINI_MODEL="):
-                new_lines.append(f"GEMINI_MODEL={model_name}")
-                found = True
-            else:
-                new_lines.append(line)
-        if not found:
-            new_lines.append(f"GEMINI_MODEL={model_name}")
-        env_file.write_text("\n".join(new_lines) + "\n")
 
     return jsonify({"ok": True, "configured": Config.GEMINI_MODEL})
 
@@ -307,32 +309,30 @@ def api_set_emails():
     contractor_email = data.get("contractor_email")
     your_email = data.get("your_email")
 
-    env_file = Config.DATA_DIR.parent / ".env"
-    lines = env_file.read_text().splitlines() if env_file.exists() else []
-    new_lines = []
-    
-    c_found = y_found = False
-    for line in lines:
-        if contractor_email is not None and line.startswith("CONTRACTOR_EMAIL="):
-            new_lines.append(f"CONTRACTOR_EMAIL={contractor_email}")
-            c_found = True
-        elif your_email is not None and line.startswith("YOUR_EMAIL="):
-            new_lines.append(f"YOUR_EMAIL={your_email}")
-            y_found = True
-        else:
-            new_lines.append(line)
-    
-    if contractor_email is not None and not c_found:
-        new_lines.append(f"CONTRACTOR_EMAIL={contractor_email}")
-    if your_email is not None and not y_found:
-        new_lines.append(f"YOUR_EMAIL={your_email}")
+    updates = {}
+    if contractor_email is not None:
+        if not isinstance(contractor_email, str) or not _EMAIL_RE.match(contractor_email):
+            return jsonify({"ok": False,
+                            "error": "That doesn't look like a valid contractor email."}), 400
+        updates["CONTRACTOR_EMAIL"] = contractor_email
+    if your_email is not None:
+        if not isinstance(your_email, str) or not _EMAIL_RE.match(your_email):
+            return jsonify({"ok": False,
+                            "error": "That doesn't look like a valid email for you."}), 400
+        updates["YOUR_EMAIL"] = your_email
 
-    if contractor_email is not None: Config.CONTRACTOR_EMAIL = contractor_email
-    if your_email is not None: Config.YOUR_EMAIL = your_email
+    if not updates:
+        return jsonify({"ok": True})
 
-    env_file.write_text("\n".join(new_lines) + "\n")
+    # Persist first: if the write fails, Config and .env must not disagree
+    # about which addresses are configured.
+    update_env_file(updates)
+    if contractor_email is not None:
+        Config.CONTRACTOR_EMAIL = contractor_email
+    if your_email is not None:
+        Config.YOUR_EMAIL = your_email
+
     return jsonify({"ok": True})
-    # (Keep all existing code in api.py, just append this to the very bottom)
 
 @bp.delete("/invoice/<invoice_id>")
 def api_delete_invoice(invoice_id):

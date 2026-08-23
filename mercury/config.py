@@ -135,3 +135,54 @@ def _apply_demo_overrides() -> None:
 
 if DEMO:
     _apply_demo_overrides()
+
+
+# Settings the running app is allowed to persist back into .env. An explicit
+# allowlist so a caller can't be tricked into writing an arbitrary line by
+# passing an unexpected key.
+_SETTABLE_ENV_KEYS = {"GEMINI_MODEL", "CONTRACTOR_EMAIL", "YOUR_EMAIL"}
+
+
+def update_env_file(values: dict[str, str], env_path: Path | None = None) -> None:
+    """Persist settings into .env, replacing existing lines or appending new
+    ones.
+
+    Raises ValueError if a key isn't one this app writes, or a value could
+    turn one line into two. That second check is the actual point: .env
+    holds SMTP and API credentials, and a value containing a newline —
+    accepted without this check — becomes a literal new line in the file,
+    letting a request silently overwrite EMAIL_PASSWORD or any other setting
+    it never named. Callers still validate the value's *shape* (an email,
+    a model name, ...) before calling — this only guarantees the write
+    itself can't be turned into something else.
+
+    env_path defaults to BASE_DIR / ".env" — the real file this process was
+    configured from — and is only ever overridden by tests. Deliberately a
+    parameter rather than something a test monkeypatches on the BASE_DIR
+    module global: other modules (blueprints/web.py, build.py) import
+    BASE_DIR as a bare name at their own module level, so patching the
+    shared global can permanently bind a *different* module to the patched
+    value if it happens to be first-imported while the patch is active —
+    order-dependent and exactly the kind of fragility this file shouldn't
+    have, given what it's protecting.
+    """
+    for key, value in values.items():
+        if key not in _SETTABLE_ENV_KEYS:
+            raise ValueError(f"{key!r} is not a setting this app writes to .env.")
+        if not isinstance(value, str) or set(value) & {"\n", "\r", "\x00"}:
+            raise ValueError(f"Invalid value for {key}.")
+
+    env_file = env_path or (BASE_DIR / ".env")
+    lines = env_file.read_text().splitlines() if env_file.exists() else []
+    remaining = dict(values)
+    new_lines = []
+    for line in lines:
+        key = line.split("=", 1)[0] if "=" in line else None
+        if key in remaining:
+            new_lines.append(f"{key}={remaining.pop(key)}")
+        else:
+            new_lines.append(line)
+    for key, value in remaining.items():
+        new_lines.append(f"{key}={value}")
+
+    env_file.write_text("\n".join(new_lines) + "\n")

@@ -4,6 +4,9 @@ Start to finish: about ten minutes. Everything runs on your own machine — no
 accounts, no hosting bill, nothing leaves the network except the email you
 send yourself.
 
+> Already installed and just want the order to bring it up in?
+> See **[RUNBOOK.md](RUNBOOK.md)**.
+
 ---
 
 ## 1. Prerequisites
@@ -63,7 +66,6 @@ gh auth login
 cd ~
 gh repo clone coopmatth/mercury-bot
 cd mercury-bot
-git checkout claude/app-redesign-offline-sync-8ye6tn
 ```
 
 <details>
@@ -79,7 +81,6 @@ git clone https://github.com/coopmatth/mercury-bot.git
 # Password: paste the token (not your Google password)
 
 cd mercury-bot
-git checkout claude/app-redesign-offline-sync-8ye6tn
 git config credential.helper 'cache --timeout=86400'   # stop it asking every time
 ```
 </details>

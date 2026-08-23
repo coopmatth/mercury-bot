@@ -62,8 +62,9 @@ Nothing about demo mode leaks into normal use: it only turns on with
 ## Setup
 
 Step-by-step Linux instructions, including cloning the private repo when you
-sign in to GitHub with Google, are in **[INSTALL.md](INSTALL.md)**. The short
-version:
+sign in to GitHub with Google, are in **[INSTALL.md](INSTALL.md)**. Once it is
+installed, **[RUNBOOK.md](RUNBOOK.md)** is the ordered go-live checklist —
+service, HTTPS, phone, and how to verify each step. The short version:
 
 ```bash
 git clone <this repo> && cd mercury-bot

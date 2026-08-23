@@ -1,12 +1,3 @@
-/* Service worker.
- *
- * Strategy by request type:
- *   - navigations  -> network first, fall back to the cached page, then /offline
- *   - static assets -> cache first (they are versioned by the cache name)
- *   - GET /api/*   -> network first with a cached copy as the fallback
- *   - writes       -> never cached; the app queues them in IndexedDB instead
- */
-
 const VERSION = '__MERCURY_BUILD__';
 const SHELL = `mercury-shell-${VERSION}`;
 const RUNTIME = `mercury-runtime-${VERSION}`;
@@ -66,11 +57,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Direct bypass for exports, SQLite downloads, and PDFs
   if (
-    url.pathname.startsWith('/api/export') ||
-    url.pathname.startsWith('/settings/backup') ||
-    url.pathname.includes('/pdf')
+    url.pathname.includes('/export/') ||
+    url.pathname.includes('/pdf') ||
+    url.pathname.includes('/backup')
   ) {
     return; 
   }

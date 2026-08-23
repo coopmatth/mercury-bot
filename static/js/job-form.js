@@ -1,8 +1,4 @@
-/* Job form.
- *
- * Everything here runs against the local store, so saving is instant and
- * identical online and off. Pricing uses the same tier rules as the server
- * (see app.js RATES) so the total shown is the total that gets billed. */
+/* Job form. */
 
 import { itemPrice, jobTotal, money, saveJob, removeRow, toast, buzz } from './app.js';
 
@@ -36,8 +32,6 @@ function refresh() {
   totalEl.textContent = money(jobTotal(items));
 }
 
-/* Steppers. Whole units step by 1; footage steps by 25 so a 450 ft drop is a
- * few taps rather than a few hundred. */
 for (const row of rows) {
   const input = row.querySelector('.qty-input');
   const step = parseFloat(input.step) === 1 ? 1 : 25;
@@ -60,8 +54,6 @@ for (const row of rows) {
 
 refresh();
 
-/* --------------------------------------------------------------- saving */
-
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = document.getElementById('save-btn');
@@ -83,6 +75,8 @@ form.addEventListener('submit', async (event) => {
       address: form.address.value.trim(),
       order_number: form.order_number.value.trim(),
       notes: form.notes.value.trim(),
+      needs_buried: document.getElementById('needs_buried').checked ? 1 : 0,
+      needs_bore: document.getElementById('needs_bore').checked ? 1 : 0,
       items,
     });
     buzz([12, 40, 12]);
@@ -112,7 +106,6 @@ document.getElementById('delete-btn')?.addEventListener('click', async () => {
   window.location.href = '/jobs';
 });
 
-/* Warn before losing a partly filled form to an accidental back-swipe. */
 let dirty = false;
 form.addEventListener('input', () => { dirty = true; });
 form.addEventListener('submit', () => { dirty = false; });

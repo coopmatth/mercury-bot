@@ -1,0 +1,30 @@
+# Mercury Tracker as a user service — starts at login, restarts on failure.
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp deploy/mercury.service ~/.config/systemd/user/
+#   # edit WorkingDirectory below if you cloned somewhere else
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now mercury
+#   loginctl enable-linger $USER    # keeps it running when you are logged out
+#
+# Check on it with:  systemctl --user status mercury
+# Follow the log with:  journalctl --user -u mercury -f
+
+[Unit]
+Description=Mercury Tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/mercury-bot
+ExecStart=%h/mercury-bot/.venv/bin/waitress-serve --host 0.0.0.0 --port 8080 --call mercury:create_app
+Restart=on-failure
+RestartSec=5
+
+# The app only ever needs its own directory.
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

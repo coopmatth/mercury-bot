@@ -46,11 +46,59 @@ print(json.dumps({"db": str(Config.DB_PATH), "demo": Config.DEMO}))
     assert "demo" in out["db"]
 
 
+# Text in a ReportLab PDF lives inside compressed content streams, so reading
+# it back needs decompression rather than a plain byte search. zlib is stdlib,
+# which keeps the test suite installable from requirements.txt alone.
+PDF_TEXT_SNIPPET = r"""
+import base64, re, zlib
+
+def pdf_text(path):
+    # ReportLab writes content streams as /ASCII85Decode then /FlateDecode.
+    # Try the whole chain, then the individual filters, then the raw bytes.
+    decoders = (
+        lambda d: zlib.decompress(base64.a85decode(d, adobe=True)),
+        lambda d: zlib.decompress(d),
+        lambda d: base64.a85decode(d, adobe=True),
+        lambda d: d,
+    )
+    out = []
+    for chunk in re.findall(rb"stream\r?\n(.*?)endstream", path.read_bytes(), re.S):
+        chunk = chunk.strip()
+        for decode in decoders:
+            try:
+                out.append(decode(chunk).decode("latin-1"))
+                break
+            except Exception:
+                continue
+    return "\n".join(out)
+"""
+
+PERSONAL_DETAILS = ("Matthew Cooper", "Lagrange", "310-7482",
+                    "coopmatth", "Ritchie", "Congressional")
+
+
+def test_pdf_text_extraction_actually_sees_the_text(ctx):
+    """Guard the guard: prove the detector below can find a name in a PDF,
+    so a passing leak test means something."""
+    from mercury.config import Config
+    from mercury.invoicing import build_mercury_invoice
+    from mercury.models import save_job, week_bounds
+
+    namespace = {}
+    exec(PDF_TEXT_SNIPPET, namespace)
+
+    start, end = week_bounds()
+    save_job({"work_date": start.isoformat(), "items": {"Installation": 1}})
+    invoice = build_mercury_invoice(start, end)
+
+    text = namespace["pdf_text"](Config.EXPORT_DIR / invoice["filename"])
+    assert Config.TECH_NAME in text, "extraction failed — the leak test would be vacuous"
+
+
 def test_demo_never_renders_personal_details(data_dir):
     """A sandbox invoice must not carry someone's name, home address or phone."""
-    out = run_in_demo("""
+    out = run_in_demo(PDF_TEXT_SNIPPET + """
 import json
-import pypdfium2 as pdfium
 from mercury import create_app
 from mercury.config import Config
 from mercury.invoicing import build_mercury_invoice
@@ -60,14 +108,12 @@ app = create_app()
 with app.app_context():
     start, end = week_bounds()
     invoice = build_mercury_invoice(start, end)
-    doc = pdfium.PdfDocument(Config.EXPORT_DIR / invoice["filename"])
-    text = doc[0].get_textpage().get_text_range()
+    text = pdf_text(Config.EXPORT_DIR / invoice["filename"])
 print(json.dumps({"text": text, "tech": Config.TECH_NAME}))
 """, data_dir)
 
     assert out["tech"] == "Alex Rivera"
-    for personal in ("Matthew Cooper", "Lagrange", "310-7482",
-                     "coopmatth", "Ritchie", "Congressional"):
+    for personal in PERSONAL_DETAILS:
         assert personal not in out["text"], f"{personal} leaked into a demo invoice"
 
 

@@ -1,0 +1,4 @@
+# Test dependencies. The suite needs nothing beyond pytest — no browser, no
+# network, no PDF toolchain.
+-r requirements.txt
+pytest>=8.0

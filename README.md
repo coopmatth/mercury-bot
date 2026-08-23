@@ -61,6 +61,10 @@ Nothing about demo mode leaks into normal use: it only turns on with
 
 ## Setup
 
+Step-by-step Linux instructions, including cloning the private repo when you
+sign in to GitHub with Google, are in **[INSTALL.md](INSTALL.md)**. The short
+version:
+
 ```bash
 git clone <this repo> && cd mercury-bot
 python3 -m venv .venv && source .venv/bin/activate
@@ -152,7 +156,7 @@ static/js/
   hydrate.js      re-renders lists from the local replica
   scanner.js      AI + offline OCR label reading
   sw.js           service worker
-tests/            60 tests, no network required
+tests/            72 tests, no network required
 ```
 
 ### Pay rules
@@ -173,10 +177,11 @@ same commit** — `tests/test_client_rates_match.py` fails if they drift.
 ## Tests
 
 ```bash
-pip install pytest && python -m pytest tests/ -q
+pip install -r requirements-dev.txt
+python -m pytest tests/ -q
 ```
 
-Covers the tier boundaries in the pay math, the sync contract (replay,
+72 tests. Covers the tier boundaries in the pay math, the sync contract (replay,
 conflicts, tombstones, delta pulls, partial-batch failures), week boundaries,
 invoice assembly, and the export pipeline.
 

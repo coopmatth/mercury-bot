@@ -47,8 +47,9 @@
   </button>
   <div class="btn-row">
     <a class="btn btn-outline" href="/invoice/{{ invoice.id }}/pdf?download=1" target="_blank" download>Download</a>
-    <a class="btn btn-ghost" href="/reports">Back to reports</a>
+    <button class="btn btn-danger" id="delete-btn" data-requires-online>Delete</button>
   </div>
+  <a class="btn btn-ghost" href="/reports">Back to reports</a>
 </div>
 {% endblock %}
 
@@ -75,6 +76,30 @@
       toast(`Could not send: ${error.message}`, 'danger');
       button.disabled = false;
       button.textContent = 'Email to the contractor';
+    }
+  });
+
+  document.getElementById('delete-btn').addEventListener('click', async (event) => {
+    if (!window.confirm('Are you sure you want to completely delete this invoice? This cannot be undone.')) return;
+    
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Deleting...';
+    try {
+      const response = await fetch('/api/invoice/{{ invoice.id }}', { method: 'DELETE' });
+      const data = await response.json();
+      if (data.ok) {
+        toast(data.message, 'success');
+        setTimeout(() => window.location.href = '/reports', 1000);
+      } else {
+        toast(data.error, 'danger');
+        button.disabled = false;
+        button.textContent = 'Delete';
+      }
+    } catch (error) {
+      toast(`Could not delete: ${error.message}`, 'danger');
+      button.disabled = false;
+      button.textContent = 'Delete';
     }
   });
 </script>

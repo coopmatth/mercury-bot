@@ -123,9 +123,7 @@
     <span class="badge badge-soft mono text-xs">{{ config.gemini_model }}</span></div>
   <div class="card-body">
     <p class="text-sm text-dim mt-0">
-      Google retires model names regularly. Check what your key can use, then
-      set <span class="mono">GEMINI_MODEL</span> in <span class="mono">.env</span>
-      and restart. The scanner falls back to on-device OCR either way.
+      Google retires model names regularly. Check what your key can use, then switch with one tap below.
     </p>
     <button class="btn btn-outline btn-block" id="check-models" data-requires-online>
       Check available models
@@ -141,7 +139,7 @@
     <p class="text-sm text-dim mt-0">
       Downloads the whole database as a single SQLite file. Keep a copy somewhere off this machine.
     </p>
-    <a class="btn btn-outline btn-block" href="/settings/backup">Download a backup</a>
+    <a class="btn btn-outline btn-block" href="/settings/backup" target="_blank">Download a backup</a>
   </div>
 </div>
 
@@ -184,21 +182,23 @@
         toast('The API returned no usable models for this key.', 'warning');
       } else {
         for (const name of data.models) {
-          const row = document.createElement('div');
-          row.className = 'list-item';
-          row.style.padding = '9px 0';
-          row.innerHTML = '<div class="li-main"><div class="li-title mono text-xs"></div></div>';
-          row.querySelector('.li-title').textContent = name;
-          if (name === data.configured) {
-            const badge = document.createElement('span');
-            badge.className = 'badge badge-green';
-            badge.textContent = 'in use';
-            row.appendChild(badge);
-          }
-          host.appendChild(row);
+          const btn = document.createElement('button');
+          btn.className = `btn btn-block mb-2 ${name === data.configured ? 'btn-success' : 'btn-outline'}`;
+          btn.textContent = `${name} ${name === data.configured ? '(Active)' : '— Click to Use'}`;
+          btn.onclick = async () => {
+            btn.textContent = 'Switching...';
+            await fetch('/api/ai/set-model', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({model: name})
+            });
+            toast(`Switched to ${name}! Restarting app...`, 'success');
+            setTimeout(() => location.reload(), 1500);
+          };
+          host.appendChild(btn);
         }
         host.classList.remove('hidden');
-        toast(`${data.models.length} models available to this key.`, 'success');
+        toast(`${data.models.length} models available.`, 'success');
       }
     } catch (error) {
       toast(`Could not check: ${error.message}`, 'danger');

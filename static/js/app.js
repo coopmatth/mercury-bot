@@ -30,16 +30,12 @@ export function toast(message, kind = 'info', ms = 3600) {
 }
 window.toast = toast;
 
-/* ------------------------------------------------------- haptic feedback */
-
 export function buzz(pattern = 12) {
   if (navigator.vibrate) {
-    try { navigator.vibrate(pattern); } catch (e) { /* ignore */ }
+    try { navigator.vibrate(pattern); } catch (e) { }
   }
 }
 window.buzz = buzz;
-
-/* --------------------------------------------------- connection + status */
 
 function renderStatus(state) {
   const pill = document.getElementById('sync-pill');
@@ -75,8 +71,6 @@ function renderStatus(state) {
     : 'Not synced yet';
 }
 
-/* --------------------------------------------------------------- money */
-
 export const money = (value) =>
   `$${(Number(value) || 0).toLocaleString('en-US', {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -94,11 +88,9 @@ export function todayISO() {
 }
 window.todayISO = todayISO;
 
-/* ------------------------------------------------------- pay rate engine
- * Mirrors mercury/rates.py exactly so an offline device shows the same
- * number the server will store. If one changes, change both. */
+/* ------------------------------------------------------- pay rate engine */
 
-export const RATES = {
+export let RATES = {
   'Installation': 110.0,
   'Fusion Splice': 15.0,
   'Place Nid w/ Riser': 12.5,
@@ -110,9 +102,28 @@ export const RATES = {
 };
 export const AERIAL_ITEM = 'Aerial Drop Footage';
 
-/* Tiered, not linear. Mirrors rates.aerial_drop_price: flat to 300 ft, flat
- * to 600 ft, then $150 plus fifty cents per foot past 601 — so a 601 ft drop
- * is exactly $150. */
+// Load stored rates dynamically from local storage / bootstrap
+async function loadDynamicRates() {
+  try {
+    const cached = await store.meta('rate_table');
+    if (cached && Array.isArray(cached)) {
+      cached.forEach(r => {
+        if (r.item && r.rate !== undefined) RATES[r.item] = parseFloat(r.rate);
+      });
+    }
+    if (navigator.onLine) {
+      const res = await fetch('/api/bootstrap');
+      const data = await res.json();
+      if (data.rates) {
+        data.rates.forEach(r => {
+          if (r.item && r.rate !== undefined) RATES[r.item] = parseFloat(r.rate);
+        });
+        await store.setMeta('rate_table', data.rates);
+      }
+    }
+  } catch (e) {}
+}
+
 export function aerialPrice(feet) {
   const ft = Number(feet) || 0;
   if (ft <= 0) return 0;
@@ -232,7 +243,6 @@ document.addEventListener('mercury:synced', (event) => {
   }
 });
 
-/** Show a message queued by the previous page before it navigated. */
 function drainFlash() {
   const raw = sessionStorage.getItem('mercury:flash');
   if (!raw) return;
@@ -240,10 +250,11 @@ function drainFlash() {
   try {
     const { message, kind } = JSON.parse(raw);
     toast(message, kind || 'success', 4200);
-  } catch (e) { /* ignore a malformed entry */ }
+  } catch (e) { }
 }
 
 export function init() {
+  loadDynamicRates();
   registerServiceWorker();
   drainFlash();
   sync.subscribe(renderStatus);

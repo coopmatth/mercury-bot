@@ -101,7 +101,8 @@ def photos_page():
 
 @bp.get("/reports")
 def reports_page():
-    start, end = _selected_week(default_to_last_completed=True)
+    # Changed default_to_last_completed to False so it opens to the current week
+    start, end = _selected_week(default_to_last_completed=False)
     return render_template(
         "reports.html",
         summary=week_summary(start, end),
@@ -114,7 +115,8 @@ def reports_page():
 
 @bp.post("/invoice/mercury")
 def create_mercury_invoice():
-    start, end = _selected_week(default_to_last_completed=True)
+    # Start and end match the current view week
+    start, end = _selected_week(default_to_last_completed=False)
     extra = invoicing.parse_line_inputs(
         request.form.getlist("desc[]"),
         request.form.getlist("qty[]"),
@@ -133,7 +135,7 @@ def create_mercury_invoice():
 
 @bp.post("/invoice/remc")
 def create_remc_invoice():
-    start, end = _selected_week(default_to_last_completed=True)
+    start, end = _selected_week(default_to_last_completed=False)
     extra = invoicing.parse_line_inputs(
         request.form.getlist("desc[]"),
         request.form.getlist("qty[]"),

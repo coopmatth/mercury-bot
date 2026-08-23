@@ -7,17 +7,10 @@
  *   - writes       -> never cached; the app queues them in IndexedDB instead
  */
 
-// Substituted by the /sw.js route with a hash of the cached assets, so a
-// changed stylesheet or script automatically retires the old caches. The
-// literal below is only a fallback if this file is ever served raw.
 const VERSION = '__MERCURY_BUILD__';
 const SHELL = `mercury-shell-${VERSION}`;
 const RUNTIME = `mercury-runtime-${VERSION}`;
 
-// Every screen the technician can reach without signal.
-// The OCR engine and its language data are ~10 MB, so they are not
-// precached on install; the scanner warms them in the background while
-// there is signal and the cache-first handler below keeps them.
 const PRECACHE = [
   '/',
   '/jobs',
@@ -46,8 +39,6 @@ const PRECACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(SHELL);
-    // addAll is all-or-nothing; add individually so one missing optional
-    // asset cannot break the whole install.
     await Promise.all(PRECACHE.map((url) =>
       cache.add(new Request(url, { cache: 'reload' })).catch(() => null)));
     await self.skipWaiting();
@@ -70,13 +61,19 @@ function isStatic(url) {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  if (request.method !== 'GET') return;               // writes go to the outbox
+  if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;    // let cross-origin pass
+  if (url.origin !== self.location.origin) return;
 
-  // Exports and PDFs are large and always want the live copy.
-  if (url.pathname.startsWith('/api/export') || url.pathname.includes('/pdf')) return;
+  // Direct bypass for exports, SQLite downloads, and PDFs
+  if (
+    url.pathname.startsWith('/api/export') ||
+    url.pathname.startsWith('/settings/backup') ||
+    url.pathname.includes('/pdf')
+  ) {
+    return; 
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
@@ -125,9 +122,6 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-/* Background Sync: let the browser finish the push after the app closes.
- * The page owns the IndexedDB outbox, so wake a client to do the work; if
- * none is open, the next launch syncs anyway. */
 self.addEventListener('sync', (event) => {
   if (event.tag !== 'mercury-sync') return;
   event.waitUntil((async () => {

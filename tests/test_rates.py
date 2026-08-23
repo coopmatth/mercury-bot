@@ -11,13 +11,27 @@ from mercury.rates import (aerial_drop_price, aerial_tier, calculate_job_total,
     (300, 75.0),        # top of tier 1
     (301, 150.0),       # bottom of tier 2
     (600, 150.0),       # top of tier 2
-    (601, 150.5),       # first overage foot
-    (700, 200.0),
-    (780, 240.0),
-    (1000, 350.0),
+    (601, 150.0),       # tier 3 opens at the flat price, no overage yet
+    (602, 150.5),       # first overage foot
+    (700, 199.5),
+    (780, 239.5),
+    (1000, 349.5),
 ])
 def test_aerial_is_tiered_not_linear(feet, expected):
     assert aerial_drop_price(feet) == pytest.approx(expected)
+
+
+def test_aerial_tier_3_has_no_price_jump_at_the_boundary():
+    """600 -> 601 must not cost the technician or the contractor a step."""
+    assert aerial_drop_price(601) == aerial_drop_price(600) == 150.0
+
+
+def test_aerial_overage_counts_from_601_not_600():
+    from mercury.rates import AERIAL_OVERAGE_RATE, AERIAL_TIER_3_MIN
+    assert AERIAL_TIER_3_MIN == 601
+    for feet in (700, 850, 1200):
+        expected = 150.0 + (feet - 601) * AERIAL_OVERAGE_RATE
+        assert aerial_drop_price(feet) == pytest.approx(expected)
 
 
 def test_aerial_tier_labels():
@@ -41,9 +55,9 @@ def test_job_total_mixes_flat_and_tiered():
     total = calculate_job_total({
         "Installation": 2,          # 220
         "Fusion Splice": 3,         # 45
-        "Aerial Drop Footage": 720, # 150 + 120*0.5 = 210
+        "Aerial Drop Footage": 720, # 150 + (720-601)*0.5 = 209.50
     })
-    assert total == pytest.approx(475.0)
+    assert total == pytest.approx(474.5)
 
 
 def test_every_item_is_priceable():

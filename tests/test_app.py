@@ -61,14 +61,14 @@ def test_week_summary_totals_jobs_and_custom_items(ctx):
     save_job({"work_date": start.isoformat(), "address": "A",
               "items": {"Installation": 2}})                       # 220
     save_job({"work_date": start.isoformat(), "address": "B",
-              "items": {"Aerial Drop Footage": 700}})              # 200
+              "items": {"Aerial Drop Footage": 700}})              # 199.50
     save_custom_item({"work_date": start.isoformat(), "name": "Extra",
                       "qty": 2, "rate": 45})                       # 90
 
     summary = week_summary(start, end)
-    assert summary["jobs_total"] == pytest.approx(420.0)
+    assert summary["jobs_total"] == pytest.approx(419.5)
     assert summary["custom_total"] == pytest.approx(90.0)
-    assert summary["weekly"] == pytest.approx(510.0)
+    assert summary["weekly"] == pytest.approx(509.5)
     assert summary["job_count"] == 2
     assert len(summary["per_day"]) == 7
 
@@ -95,10 +95,10 @@ def test_invoice_groups_aerial_by_tier_and_bills_long_drops_singly(ctx):
     tier2 = next(v for k, v in by_desc.items() if k.startswith("Aerial Drop (301-600')"))
     assert tier2["qty"] == 1 and tier2["amount"] == pytest.approx(150.0)
 
-    # 780 ft = 150 + 180 * 0.50 = 240, on its own line.
+    # 780 ft = 150 + (780 - 601) * 0.50 = 239.50, on its own line.
     long_drop = next(v for k, v in by_desc.items() if "601'+" in k)
-    assert long_drop["amount"] == pytest.approx(240.0)
-    assert total == pytest.approx(540.0)
+    assert long_drop["amount"] == pytest.approx(239.5)
+    assert total == pytest.approx(539.5)
 
 
 def test_remc_items_stay_off_the_mercury_invoice(ctx):
@@ -123,11 +123,23 @@ def test_invoice_refuses_to_bill_an_empty_week(ctx):
         build_mercury_invoice(start, end)
 
 
-def test_due_date_is_the_second_friday_after_the_week_closes(ctx):
-    from mercury.invoicing import default_due_date
-    due = default_due_date(date(2026, 8, 29))   # a Saturday
-    assert due.weekday() == 4                   # Friday
-    assert due == date(2026, 9, 11)
+def test_terms_are_net_14_from_the_invoice_date(ctx):
+    from mercury.invoicing import NET_TERMS_DAYS, default_due_date
+    assert NET_TERMS_DAYS == 14
+    assert default_due_date(date(2026, 8, 23)) == date(2026, 9, 6)
+    assert default_due_date(date(2026, 12, 26)) == date(2027, 1, 9)   # crosses a year
+    assert (default_due_date() - date.today()).days == 14
+
+
+def test_generated_invoice_is_due_14_days_after_issue(ctx):
+    from datetime import datetime
+    from mercury.invoicing import build_mercury_invoice
+    start, end = week_bounds()
+    save_job({"work_date": start.isoformat(), "items": {"Installation": 1}})
+
+    invoice = build_mercury_invoice(start, end)
+    due = datetime.strptime(invoice["due_date"], "%m/%d/%y").date()
+    assert (due - date.today()).days == 14
 
 
 def test_exports_download_as_real_workbooks(client, ctx):

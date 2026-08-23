@@ -105,7 +105,7 @@ def reports_page():
         weeks=recent_weeks(),
         selected_week=start.isoformat(),
         invoices=invoicing.list_invoices(),
-        default_due=invoicing.default_due_date(end).strftime("%m/%d/%y"),
+        default_due=invoicing.default_due_date().strftime("%m/%d/%y"),
     )
 
 
@@ -121,7 +121,6 @@ def create_mercury_invoice():
         invoice = invoicing.build_mercury_invoice(
             start, end, extra,
             due_date=request.form.get("due_date", "").strip(),
-            notes=request.form.get("notes", "").strip(),
         )
     except ValueError as exc:
         flash(str(exc), "danger")
@@ -141,7 +140,6 @@ def create_remc_invoice():
         invoice = invoicing.build_remc_invoice(
             extra,
             due_date=request.form.get("due_date", "").strip(),
-            notes=request.form.get("notes", "").strip(),
             start=start, end=end,
         )
     except ValueError as exc:

@@ -17,7 +17,7 @@ yourself — no accounts, no subscriptions, no cloud bill.
 | **Equipment scanner** | Reads ONT/gateway labels from photos — AI online, on-device OCR offline |
 | **Photo compressor** | Shrinks job photos before upload, entirely on the phone |
 | **Weekly spreadsheets** | Contractor sheet (quantities only) and pay sheet (with totals) |
-| **Invoices** | Mercury and REMC PDFs, emailed straight to the contractor |
+| **Invoices** | Mercury and REMC PDFs on net-14 terms, emailed straight to the contractor |
 | **Dashboard** | Today, this week, earnings by day, work completed, per-job averages |
 
 ### Everything works offline
@@ -128,6 +128,13 @@ static/js/
   sw.js           service worker
 tests/            60 tests, no network required
 ```
+
+### Pay rules
+
+* Aerial drops are tiered, not linear: **$75** to 300 ft, **$150** to 600 ft,
+  then **$150 plus $0.50 for every foot past 601** — so a 601 ft drop is
+  exactly $150 and a 780 ft drop is $239.50.
+* Invoice terms are **net 14**: due fourteen days after the invoice date.
 
 ### Rates live in two places, on purpose
 

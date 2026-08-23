@@ -110,12 +110,15 @@ export const RATES = {
 };
 export const AERIAL_ITEM = 'Aerial Drop Footage';
 
+/* Tiered, not linear. Mirrors rates.aerial_drop_price: flat to 300 ft, flat
+ * to 600 ft, then $150 plus fifty cents per foot past 601 — so a 601 ft drop
+ * is exactly $150. */
 export function aerialPrice(feet) {
   const ft = Number(feet) || 0;
   if (ft <= 0) return 0;
   if (ft <= 300) return 75.0;
   if (ft <= 600) return 150.0;
-  return 150.0 + (ft - 600) * 0.5;
+  return Math.round((150.0 + (ft - 601) * 0.5) * 100) / 100;
 }
 
 export function itemPrice(name, qty) {

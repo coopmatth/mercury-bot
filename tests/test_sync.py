@@ -36,7 +36,7 @@ def test_offline_queue_uploads_and_prices_correctly(client):
         "Installation": 2, "Aerial Drop Footage": 720})])
     assert result["applied"]["jobs"] == 1
     stored = client.get("/api/jobs").get_json()["jobs"][0]
-    assert stored["total"] == pytest.approx(430.0)   # 220 + 210
+    assert stored["total"] == pytest.approx(429.5)   # 220 + 209.50
 
 
 def test_replaying_a_push_does_not_duplicate(client):

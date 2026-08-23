@@ -1,9 +1,7 @@
 """Invoice assembly: numbering, due dates, line items, persistence."""
 from __future__ import annotations
 
-from datetime import date, datetime
-
-from dateutil.relativedelta import FR, relativedelta
+from datetime import date, timedelta
 
 from .config import Config
 from .db import get_db, new_id, utcnow
@@ -12,10 +10,13 @@ from .models import (custom_items_as_lines, invoice_lines, list_custom_items,
                      parse_date, week_bounds)
 
 
-def default_due_date(week_end: date) -> date:
-    """Net terms carried over from the original: the second Friday after the
-    week closes."""
-    return week_end + relativedelta(weekday=FR(2))
+# Payment terms: net 14 — due fourteen days after the invoice is issued.
+NET_TERMS_DAYS = 14
+
+
+def default_due_date(issued: date | None = None) -> date:
+    """Net 14 from the invoice date."""
+    return (issued or date.today()) + timedelta(days=NET_TERMS_DAYS)
 
 
 def _next_number(kind: str, issued: date) -> str:
@@ -48,7 +49,7 @@ def _record(kind: str, number: str, start: date | None, end: date | None,
 
 def build_mercury_invoice(start: date, end: date,
                           extra_items: list[dict] | None = None,
-                          due_date: str = "", notes: str = "") -> dict:
+                          due_date: str = "") -> dict:
     """Weekly invoice: every job in the period, plus any Mercury-billed
     custom items, plus one-off lines typed on the invoice screen."""
     customs = custom_items_as_lines(list_custom_items(start, end, bill_to="mercury"))
@@ -57,7 +58,7 @@ def build_mercury_invoice(start: date, end: date,
         raise ValueError("There is nothing to invoice for this week yet.")
 
     issued = date.today()
-    due = due_date or default_due_date(end).strftime("%m/%d/%y")
+    due = due_date or default_due_date(issued).strftime("%m/%d/%y")
     number = _next_number("mercury", issued)
     filename = f"Invoice_{start.strftime('%m-%d-%y')}_to_{end.strftime('%m-%d-%y')}.pdf"
 
@@ -65,13 +66,12 @@ def build_mercury_invoice(start: date, end: date,
         filename=filename, number=number, lines=lines, total=total,
         issued=issued, due=due,
         period=f"{start.strftime('%m/%d/%y')} - {end.strftime('%m/%d/%y')}",
-        notes=notes,
     )
     return _record("mercury", number, start, end, due, total, filename)
 
 
 def build_remc_invoice(extra_items: list[dict] | None = None,
-                       due_date: str = "", notes: str = "",
+                       due_date: str = "",
                        start: date | None = None, end: date | None = None) -> dict:
     """REMC invoice: custom items flagged for REMC, plus typed one-offs."""
     if start is None or end is None:
@@ -94,13 +94,13 @@ def build_remc_invoice(extra_items: list[dict] | None = None,
 
     total = round(sum(l["amount"] for l in lines), 2)
     issued = date.today()
-    due = due_date or default_due_date(end).strftime("%m/%d/%y")
+    due = due_date or default_due_date(issued).strftime("%m/%d/%y")
     number = _next_number("remc", issued)
     filename = f"REMC_Invoice_{issued.strftime('%Y-%m-%d')}.pdf"
 
     build_invoice_pdf(
         filename=filename, number=number, lines=lines, total=total,
-        issued=issued, due=due, period="", notes=notes,
+        issued=issued, due=due, period="",
     )
     return _record("remc", number, start, end, due, total, filename)
 

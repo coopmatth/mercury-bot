@@ -41,11 +41,14 @@ AERIAL_ITEM = "Aerial Drop Footage"
 # allows decimals; everything else steps by 1.
 FOOTAGE_ITEMS = {"Conduit Pull Footage", AERIAL_ITEM}
 
-AERIAL_TIER_1_MAX = 300      # 0-300 ft  -> flat
+AERIAL_TIER_1_MAX = 300      # 0-300 ft   -> flat
 AERIAL_TIER_2_MAX = 600      # 301-600 ft -> flat
+AERIAL_TIER_3_MIN = 601      # 601+ ft    -> flat plus a per-foot overage
 AERIAL_TIER_1_PRICE = 75.00
 AERIAL_TIER_2_PRICE = 150.00
-AERIAL_OVERAGE_RATE = 0.50   # per foot beyond 600
+# The overage counts from the start of the tier: a 601 ft drop is $150 flat,
+# and each foot past 601 adds fifty cents.
+AERIAL_OVERAGE_RATE = 0.50
 
 
 @dataclass(frozen=True)
@@ -63,8 +66,8 @@ class LineItem:
 def aerial_drop_price(feet: float) -> float:
     """Price a single aerial drop of `feet` feet.
 
-    Tiered, not linear: flat to 300 ft, flat again to 600 ft, then the
-    tier-2 price plus a per-foot overage.
+    Tiered, not linear: flat to 300 ft, flat again to 600 ft, then $150 plus
+    fifty cents for every foot past 601 — so a 601 ft drop is exactly $150.
     """
     if feet <= 0:
         return 0.0
@@ -72,7 +75,8 @@ def aerial_drop_price(feet: float) -> float:
         return AERIAL_TIER_1_PRICE
     if feet <= AERIAL_TIER_2_MAX:
         return AERIAL_TIER_2_PRICE
-    return AERIAL_TIER_2_PRICE + (feet - AERIAL_TIER_2_MAX) * AERIAL_OVERAGE_RATE
+    return round(
+        AERIAL_TIER_2_PRICE + (feet - AERIAL_TIER_3_MIN) * AERIAL_OVERAGE_RATE, 2)
 
 
 def aerial_tier(feet: float) -> str:

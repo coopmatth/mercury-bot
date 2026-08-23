@@ -9,7 +9,7 @@ import pytest
 from mercury.config import BASE_DIR
 from mercury.rates import (AERIAL_ITEM, AERIAL_OVERAGE_RATE, AERIAL_TIER_1_MAX,
                            AERIAL_TIER_1_PRICE, AERIAL_TIER_2_MAX,
-                           AERIAL_TIER_2_PRICE, PAY_RATES)
+                           AERIAL_TIER_2_PRICE, AERIAL_TIER_3_MIN, PAY_RATES)
 
 APP_JS = (BASE_DIR / "static" / "js" / "app.js").read_text()
 
@@ -35,6 +35,7 @@ def test_aerial_item_name_matches():
 @pytest.mark.parametrize("literal,expected", [
     (AERIAL_TIER_1_MAX, 300),
     (AERIAL_TIER_2_MAX, 600),
+    (AERIAL_TIER_3_MIN, 601),
     (AERIAL_TIER_1_PRICE, 75.0),
     (AERIAL_TIER_2_PRICE, 150.0),
     (AERIAL_OVERAGE_RATE, 0.5),
@@ -51,4 +52,4 @@ def test_client_aerial_function_still_has_the_tier_shape():
     source = body.group(1)
     assert "ft <= 300" in source and "return 75.0" in source
     assert "ft <= 600" in source and "return 150.0" in source
-    assert "(ft - 600) * 0.5" in source
+    assert "(ft - 601) * 0.5" in source, "overage must count from 601, not 600"

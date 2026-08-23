@@ -1,16 +1,19 @@
-"""Pay rates and job-total math.
-
-This module is the money. Everything else in the app renders, stores or
-transmits what these functions produce, so the rates and the tier
-boundaries below are carried over from the original tracker unchanged.
-"""
+"""Pay rates and job-total math with dynamic rate card support."""
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from .db import get_db, new_id
 
-# Order matters: it is the column order of every exported spreadsheet and the
-# field order of the job form.
-ITEM_LIST = [
+AERIAL_ITEM = "Aerial Drop Footage"
+AERIAL_TIER_1_MAX = 300
+AERIAL_TIER_2_MAX = 600
+AERIAL_TIER_3_MIN = 601
+AERIAL_TIER_1_PRICE = 75.00
+AERIAL_TIER_2_PRICE = 150.00
+AERIAL_OVERAGE_RATE = 0.50
+
+# Fallback default items
+DEFAULT_ITEM_LIST = [
     "Installation",
     "Fusion Splice",
     "Place Nid w/ Riser",
@@ -22,65 +25,75 @@ ITEM_LIST = [
     "Aerial Drop Footage",
 ]
 
-# Flat per-unit rates. "Aerial Drop Footage" is deliberately absent: it is
-# tiered, not linear, and is priced by aerial_drop_price() below.
-PAY_RATES = {
-    "Installation": 110.00,
-    "Fusion Splice": 15.00,
-    "Place Nid w/ Riser": 12.50,
-    "Temp drop laid": 20.00,
-    "Trip Fee": 30.00,
-    "Direct bury flat drop (0-300')": 75.00,
-    "bore (0-12')": 25.00,
-    "Conduit Pull Footage": 0.55,
-}
-
-AERIAL_ITEM = "Aerial Drop Footage"
-
-# Items measured in feet rather than whole units. The UI labels these "ft" and
-# allows decimals; everything else steps by 1.
 FOOTAGE_ITEMS = {"Conduit Pull Footage", AERIAL_ITEM}
 
-AERIAL_TIER_1_MAX = 300      # 0-300 ft   -> flat
-AERIAL_TIER_2_MAX = 600      # 301-600 ft -> flat
-AERIAL_TIER_3_MIN = 601      # 601+ ft    -> flat plus a per-foot overage
-AERIAL_TIER_1_PRICE = 75.00
-AERIAL_TIER_2_PRICE = 150.00
-# The overage counts from the start of the tier: a 601 ft drop is $150 flat,
-# and each foot past 601 adds fifty cents.
-AERIAL_OVERAGE_RATE = 0.50
+
+def get_all_rates() -> list[dict]:
+    try:
+        rows = get_db().execute("SELECT * FROM rates ORDER BY sort_order ASC, name ASC").fetchall()
+        if rows:
+            return [dict(r) for r in rows]
+    except Exception:
+        pass
+    return [
+        {"id": "1", "name": "Installation", "rate": 110.00, "unit": "ea", "is_tiered": 0, "sort_order": 1},
+        {"id": "2", "name": "Fusion Splice", "rate": 15.00, "unit": "ea", "is_tiered": 0, "sort_order": 2},
+        {"id": "3", "name": "Place Nid w/ Riser", "rate": 12.50, "unit": "ea", "is_tiered": 0, "sort_order": 3},
+        {"id": "4", "name": "Temp drop laid", "rate": 20.00, "unit": "ea", "is_tiered": 0, "sort_order": 4},
+        {"id": "5", "name": "Trip Fee", "rate": 30.00, "unit": "ea", "is_tiered": 0, "sort_order": 5},
+        {"id": "6", "name": "Direct bury flat drop (0-300')", "rate": 75.00, "unit": "ea", "is_tiered": 0, "sort_order": 6},
+        {"id": "7", "name": "bore (0-12')", "rate": 25.00, "unit": "ea", "is_tiered": 0, "sort_order": 7},
+        {"id": "8", "name": "Conduit Pull Footage", "rate": 0.55, "unit": "ft", "is_tiered": 0, "sort_order": 8},
+        {"id": "9", "name": "Aerial Drop Footage", "rate": 0.00, "unit": "ft", "is_tiered": 1, "sort_order": 9},
+    ]
 
 
-@dataclass(frozen=True)
-class LineItem:
-    """One priced row on an invoice."""
-    description: str
-    qty: float
-    rate: float
-    amount: float
+def get_item_list() -> list[str]:
+    rates = get_all_rates()
+    return [r["name"] for r in rates]
 
-    def to_dict(self) -> dict:
-        return asdict(self)
+
+# Dynamic reference proxy for backwards-compatibility
+class _ItemListProxy(list):
+    def __iter__(self):
+        return iter(get_item_list())
+    def __len__(self):
+        return len(get_item_list())
+    def __contains__(self, item):
+        return item in get_item_list()
+    def __getitem__(self, index):
+        return get_item_list()[index]
+
+ITEM_LIST = _ItemListProxy(DEFAULT_ITEM_LIST)
+
+
+def get_pay_rates() -> dict[str, float]:
+    return {r["name"]: float(r["rate"]) for r in get_all_rates()}
+
+
+# Dynamic dictionary proxy for PAY_RATES
+class _PayRatesProxy(dict):
+    def __getitem__(self, key):
+        return get_pay_rates().get(key, 0.0)
+    def get(self, key, default=0.0):
+        return get_pay_rates().get(key, default)
+    def __contains__(self, key):
+        return key in get_pay_rates()
+
+PAY_RATES = _PayRatesProxy()
 
 
 def aerial_drop_price(feet: float) -> float:
-    """Price a single aerial drop of `feet` feet.
-
-    Tiered, not linear: flat to 300 ft, flat again to 600 ft, then $150 plus
-    fifty cents for every foot past 601 — so a 601 ft drop is exactly $150.
-    """
     if feet <= 0:
         return 0.0
     if feet <= AERIAL_TIER_1_MAX:
         return AERIAL_TIER_1_PRICE
     if feet <= AERIAL_TIER_2_MAX:
         return AERIAL_TIER_2_PRICE
-    return round(
-        AERIAL_TIER_2_PRICE + (feet - AERIAL_TIER_3_MIN) * AERIAL_OVERAGE_RATE, 2)
+    return round(AERIAL_TIER_2_PRICE + (feet - AERIAL_TIER_3_MIN) * AERIAL_OVERAGE_RATE, 2)
 
 
 def aerial_tier(feet: float) -> str:
-    """Tier label used to group aerial drops on an invoice."""
     if feet <= AERIAL_TIER_1_MAX:
         return "0-300"
     if feet <= AERIAL_TIER_2_MAX:
@@ -89,37 +102,59 @@ def aerial_tier(feet: float) -> str:
 
 
 def item_price(item_name: str, qty: float) -> float:
-    """Price `qty` of a single line item."""
-    if item_name not in ITEM_LIST or qty is None or qty <= 0:
+    if not item_name or qty is None or qty <= 0:
         return 0.0
     if item_name == AERIAL_ITEM:
         return aerial_drop_price(qty)
-    return qty * PAY_RATES.get(item_name, 0.0)
+    pay_rates = get_pay_rates()
+    return round(qty * pay_rates.get(item_name, 0.0), 2)
 
 
 def calculate_job_total(item_quantities: dict) -> float:
-    """Total pay for one job, given {item name: quantity}."""
-    return round(sum(item_price(name, qty or 0) for name, qty in item_quantities.items()), 2)
+    return round(sum(item_price(name, qty or 0) for name, qty in (item_quantities or {}).items()), 2)
 
 
 def rate_label(item_name: str) -> str:
-    """Human-readable rate, for the job form and rate sheet."""
     if item_name == AERIAL_ITEM:
         return "$75 / $150 / +$0.50 ft"
-    rate = PAY_RATES.get(item_name, 0.0)
-    unit = " / ft" if item_name in FOOTAGE_ITEMS else " ea"
-    return f"${rate:,.2f}{unit}"
+    rates = {r["name"]: r for r in get_all_rates()}
+    info = rates.get(item_name)
+    if not info:
+        return "$0.00 ea"
+    unit = " / ft" if info["unit"] == "ft" else " ea"
+    return f"${info['rate']:,.2f}{unit}"
 
 
 def rate_table() -> list[dict]:
-    """The full rate card, for the API and the in-app rate sheet."""
     return [
         {
-            "item": name,
-            "rate": PAY_RATES.get(name),
-            "tiered": name == AERIAL_ITEM,
-            "unit": "ft" if name in FOOTAGE_ITEMS else "ea",
-            "label": rate_label(name),
+            "id": r["id"],
+            "item": r["name"],
+            "rate": r["rate"],
+            "tiered": bool(r["is_tiered"]),
+            "unit": r["unit"],
+            "label": rate_label(r["name"]),
         }
-        for name in ITEM_LIST
+        for r in get_all_rates()
     ]
+
+
+def save_rate_card_item(name: str, rate: float, unit: str = "ea", item_id: str = "") -> None:
+    conn = get_db()
+    with conn:
+        if item_id:
+            conn.execute(
+                "UPDATE rates SET name = ?, rate = ?, unit = ? WHERE id = ?",
+                (name, rate, unit, item_id),
+            )
+        else:
+            conn.execute(
+                "INSERT OR REPLACE INTO rates (id, name, rate, unit, is_tiered, sort_order) VALUES (?, ?, ?, ?, 0, 99)",
+                (new_id(), name, rate, unit),
+            )
+
+
+def delete_rate_card_item(item_id: str) -> None:
+    conn = get_db()
+    with conn:
+        conn.execute("DELETE FROM rates WHERE id = ?", (item_id,))

@@ -9,13 +9,16 @@ import pytest
 from mercury.config import BASE_DIR
 from mercury.rates import (AERIAL_ITEM, AERIAL_OVERAGE_RATE, AERIAL_TIER_1_MAX,
                            AERIAL_TIER_1_PRICE, AERIAL_TIER_2_MAX,
-                           AERIAL_TIER_2_PRICE, AERIAL_TIER_3_MIN, PAY_RATES)
+                           AERIAL_TIER_2_PRICE, AERIAL_TIER_3_MIN, get_pay_rates)
 
 APP_JS = (BASE_DIR / "static" / "js" / "app.js").read_text()
 
 
 def _js_rates() -> dict:
-    block = re.search(r"export const RATES = \{(.*?)\};", APP_JS, re.S)
+    # `let`, not `const`: the dynamic rate-loading code (loadDynamicRates in
+    # app.js) mutates this object in place once the client fetches the live
+    # rate card, so it can no longer be declared const.
+    block = re.search(r"export let RATES = \{(.*?)\};", APP_JS, re.S)
     assert block, "RATES table not found in static/js/app.js"
     rates = {}
     for name, value in re.findall(r"""['"](.+?)['"]\s*:\s*([\d.]+)""", block.group(1)):
@@ -24,7 +27,16 @@ def _js_rates() -> dict:
 
 
 def test_flat_rates_match_the_server():
-    assert _js_rates() == PAY_RATES
+    # PAY_RATES is a proxy whose real dict protocol (iteration, equality,
+    # dict()) is not implemented — only __getitem__/.get()/__contains__ are,
+    # so comparisons go through the underlying get_pay_rates() directly.
+    # The JS RATES table deliberately omits the tiered aerial item (it's
+    # priced by aerialPrice(), not looked up by name), matching the
+    # original design — so exclude it here too rather than comparing against
+    # its placeholder rate of 0.
+    server_flat_rates = {name: rate for name, rate in get_pay_rates().items()
+                         if name != AERIAL_ITEM}
+    assert _js_rates() == server_flat_rates
 
 
 def test_aerial_item_name_matches():

@@ -158,19 +158,27 @@ def test_due_date_does_not_move_with_the_day_you_raise_the_invoice(ctx):
     assert (due - end).days == 13
 
 
-def test_reports_bills_the_week_that_just_closed(client, ctx):
-    """On any day of the current week, the invoice covers the previous one."""
+def test_reports_defaults_to_the_current_week(client, ctx):
+    """Reports opens to the in-progress week by default; the closed week
+    (what actually gets billed on net-14 terms) is still one pick away via
+    the week selector, and its total should never be conflated with the
+    current week's on that first, default screen."""
     from mercury.models import last_completed_week
-    start, end = last_completed_week()
-    save_job({"work_date": start.isoformat(), "address": "Closed week",
+    closed_start, _ = last_completed_week()
+    current_start, _ = week_bounds()
+    save_job({"work_date": closed_start.isoformat(), "address": "Closed week",
               "items": {"Installation": 1}})
-    save_job({"work_date": week_bounds()[0].isoformat(), "address": "In progress",
+    save_job({"work_date": current_start.isoformat(), "address": "In progress",
               "items": {"Installation": 9}})
 
-    body = client.get("/reports").data.decode()
-    assert start.strftime("%b %d") in body
-    # The in-progress week's larger total must not be what is offered to bill.
-    assert "$990.00" not in body
+    default_body = client.get("/reports").data.decode()
+    assert current_start.strftime("%b %d") in default_body
+    assert "$990.00" in default_body          # the in-progress week's total
+
+    picked_body = client.get(f"/reports?week={closed_start.isoformat()}").data.decode()
+    assert closed_start.strftime("%b %d") in picked_body
+    assert "$110.00" in picked_body           # the closed week's total
+    assert "$990.00" not in picked_body
 
 
 def test_exports_download_as_real_workbooks(client, ctx):

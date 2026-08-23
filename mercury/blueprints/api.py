@@ -74,7 +74,11 @@ def api_save_rate():
 
 @bp.delete("/rates/<item_id>")
 def api_delete_rate(item_id):
-    delete_rate_card_item(item_id)
+    if not delete_rate_card_item(item_id):
+        return jsonify({"ok": False, "error":
+                        "That item can't be deleted — it's either missing or "
+                        "it's the tiered aerial-drop pricing, which every "
+                        "job form depends on."}), 400
     return jsonify({"ok": True, "rates": rate_table()})
 
 

@@ -70,4 +70,10 @@ def test_rate_table_covers_the_item_list():
     assert [row["item"] for row in rate_table()] == ITEM_LIST
     aerial = [r for r in rate_table() if r["tiered"]]
     assert len(aerial) == 1 and aerial[0]["item"] == "Aerial Drop Footage"
-    assert "Aerial Drop Footage" not in PAY_RATES
+    # Aerial's entry in the rate card carries a flat "rate" of 0 — it's a
+    # placeholder for the tiered pricing table, never actually charged as a
+    # flat rate. What has to hold is that item_price() still prices it
+    # correctly despite that placeholder, not that it's absent from
+    # PAY_RATES (it's a real row in the `rates` table now).
+    assert PAY_RATES.get("Aerial Drop Footage", 0) == 0
+    assert item_price("Aerial Drop Footage", 780) > 0

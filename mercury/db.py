@@ -90,7 +90,32 @@ CREATE TABLE IF NOT EXISTS sync_devices (
     last_seq   INTEGER NOT NULL DEFAULT 0,
     pushes     INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS rates (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    rate       REAL NOT NULL DEFAULT 0,
+    unit       TEXT NOT NULL DEFAULT 'ea',
+    is_tiered  INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
 """
+
+# Seeded into `rates` the first time the table is empty. Kept in step with
+# rates.py's hardcoded fallback list, which these rows now supersede.
+DEFAULT_RATE_CARD = [
+    ("Installation", 110.00, "ea", 0, 1),
+    ("Fusion Splice", 15.00, "ea", 0, 2),
+    ("Place Nid w/ Riser", 12.50, "ea", 0, 3),
+    ("Temp drop laid", 20.00, "ea", 0, 4),
+    ("Trip Fee", 30.00, "ea", 0, 5),
+    ("Direct bury flat drop (0-300')", 75.00, "ea", 0, 6),
+    ("bore (0-12')", 25.00, "ea", 0, 7),
+    ("Conduit Pull Footage", 0.55, "ft", 0, 8),
+    # Tiered, so its flat "rate" is a placeholder — aerial_drop_price() in
+    # rates.py prices it, never this column.
+    ("Aerial Drop Footage", 0.00, "ft", 1, 9),
+]
 
 SYNC_TABLES = {
     "jobs": [
@@ -142,7 +167,18 @@ def init_db() -> None:
     if "needs_buried" not in columns:
         conn.execute("ALTER TABLE jobs ADD COLUMN needs_buried INTEGER NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE jobs ADD COLUMN needs_bore INTEGER NOT NULL DEFAULT 0")
-        
+
+    # Seed the rate card once. Without this the `rates` table exists but is
+    # empty, so every lookup falls through to rates.py's hardcoded list and
+    # the rate-editor UI has nothing real to edit.
+    if conn.execute("SELECT COUNT(*) AS n FROM rates").fetchone()["n"] == 0:
+        conn.executemany(
+            "INSERT INTO rates (id, name, rate, unit, is_tiered, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [(new_id(), name, rate, unit, tiered, order)
+             for name, rate, unit, tiered, order in DEFAULT_RATE_CARD],
+        )
+
     conn.commit()
 
 def next_seq(conn: sqlite3.Connection) -> int:

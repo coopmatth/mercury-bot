@@ -154,7 +154,16 @@ def save_rate_card_item(name: str, rate: float, unit: str = "ea", item_id: str =
             )
 
 
-def delete_rate_card_item(item_id: str) -> None:
+def delete_rate_card_item(item_id: str) -> bool:
+    """Delete a rate card row. Refuses the tiered aerial row: removing it
+    would drop "Aerial Drop Footage" out of ITEM_LIST, and every future job
+    save would then silently discard any aerial footage it was given."""
     conn = get_db()
+    row = conn.execute("SELECT is_tiered FROM rates WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        return False
+    if row["is_tiered"]:
+        return False
     with conn:
         conn.execute("DELETE FROM rates WHERE id = ?", (item_id,))
+    return True

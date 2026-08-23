@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% set active_tab = 'home' %}
+{% set hydrate_mode = 'dashboard' %}
+{% set week_start = summary.start %}{% set week_end = summary.end %}
+{% block title %}Dashboard · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <div class="flex-between">
+    <div>
+      <h1>Good {{ 'morning' if now().hour < 12 else ('afternoon' if now().hour < 18 else 'evening') }}</h1>
+      <p>{{ TECH_NAME }} · {{ summary.range_label }}</p>
+    </div>
+  </div>
+</div>
+
+{% if weeks|length > 1 %}
+<form method="get" action="/" class="mb-2">
+  <select name="week" onchange="this.form.submit()" aria-label="Choose a pay week">
+    {% for w in weeks %}
+      <option value="{{ w.start }}" {{ 'selected' if w.start == selected_week }}>
+        {{ w.label }}{{ ' · current' if w.is_current }}
+      </option>
+    {% endfor %}
+  </select>
+</form>
+{% endif %}
+
+<div class="stat-grid mb-2">
+  <div class="stat accent-green">
+    <div class="stat-label">Today</div>
+    <div class="stat-value text-green" data-stat="daily">{{ summary.daily|money }}</div>
+    <div class="stat-sub">{{ now().strftime('%A') }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">This week</div>
+    <div class="stat-value text-accent" data-stat="weekly">{{ summary.weekly|money }}</div>
+    <div class="stat-sub" data-sub="days_worked">{{ summary.days_worked }} of 7 days worked</div>
+  </div>
+  <div class="stat accent-violet">
+    <div class="stat-label">Jobs</div>
+    <div class="stat-value sm text-violet" data-stat="job_count">{{ summary.job_count }}</div>
+    <div class="stat-sub" data-sub="avg_per_job">{{ summary.avg_per_job|money }} average</div>
+  </div>
+  <div class="stat accent-amber">
+    <div class="stat-label">Per day</div>
+    <div class="stat-value sm text-amber" data-stat="avg_per_day">{{ summary.avg_per_day|money }}</div>
+    <div class="stat-sub">on days worked</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span>Earnings by day</span>
+    <span class="spacer"></span>
+    <span class="badge badge-soft">{{ summary.range_label }}</span>
+  </div>
+  <div class="card-body">
+    {% set peak = summary.per_day|map(attribute='amount')|max %}
+    <div class="week-chart" data-chart>
+      {% for day in summary.per_day %}
+      <div class="bar-wrap">
+        <div class="bar-track">
+          <div class="bar {{ 'today' if day.date == now().strftime('%Y-%m-%d') }}"
+               style="height: {{ (day.amount / peak * 100) if peak else 0 }}%"
+               title="{{ day.label }}: {{ day.amount|money }}"></div>
+        </div>
+        <div class="bar-label">{{ day.label }}</div>
+        <div class="bar-value">{{ '' if not day.amount else (day.amount|round|int) }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="section-label">Quick actions</div>
+<div class="tile-grid mb-2">
+  <a href="/jobs/new" class="tile primary">
+    <span class="tile-icon">＋</span>
+    <span class="tile-name">Log a job</span>
+    <span class="tile-sub">Works offline</span>
+  </a>
+  <a href="/scanner" class="tile">
+    <span class="tile-icon">⧉</span>
+    <span class="tile-name">Scan gear</span>
+    <span class="tile-sub">{{ 'AI + OCR' if ai_available else 'On-device OCR' }}</span>
+  </a>
+  <a href="/custom" class="tile">
+    <span class="tile-icon">✎</span>
+    <span class="tile-name">Custom pay</span>
+    <span class="tile-sub" data-sub="custom_count">{{ summary.custom_count }} this week</span>
+  </a>
+  <a href="/photos" class="tile">
+    <span class="tile-icon">▧</span>
+    <span class="tile-name">Photos</span>
+    <span class="tile-sub">Shrink for upload</span>
+  </a>
+  <a href="/reports" class="tile wide">
+    <span class="tile-icon">▤</span>
+    <span class="tile-info">
+      <span class="tile-name">Reports &amp; invoices</span>
+      <span class="tile-sub">Spreadsheets, PDFs, email</span>
+    </span>
+  </a>
+</div>
+
+<div class="card {{ '' if summary.task_counts else 'hidden' }}">
+  <div class="card-head">
+    <span>Work completed</span>
+    <span class="spacer"></span>
+    <span class="badge" data-task-badge>{{ summary.job_count }} jobs</span>
+  </div>
+  <div class="list" data-task-list>
+    {% for item in ITEM_LIST %}
+      {% if summary.task_counts.get(item) %}
+      <div class="list-item">
+        <div class="li-main">
+          <div class="li-title">{{ item }}</div>
+          <div class="li-sub">
+            {% if item == 'Aerial Drop Footage' %}
+              {{ summary.task_counts[item]|qty }} ft total · tiered {{ rate_label(item) }}
+            {% else %}
+              {{ summary.task_counts[item]|qty }} {{ 'ft' if item in FOOTAGE_ITEMS else '×' }} {{ rate_label(item) }}
+            {% endif %}
+          </div>
+        </div>
+        <div class="li-amount">{{ summary.task_pay.get(item, 0)|money }}</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+    {% if summary.custom_total %}
+    <div class="list-item">
+      <div class="li-main">
+        <div class="li-title">Custom items</div>
+        <div class="li-sub">{{ summary.custom_count }} entries</div>
+      </div>
+      <div class="li-amount">{{ summary.custom_total|money }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span>Recent jobs</span>
+    <span class="spacer"></span>
+    <a href="/jobs" class="btn btn-sm btn-ghost">View all</a>
+  </div>
+  <div class="list" data-recent-jobs>
+    {% if not summary.jobs %}
+    <div class="empty">
+      <div class="empty-icon">◷</div>
+      <h3>Nothing logged yet this week</h3>
+      <p>Log your first job — it saves instantly, signal or not.</p>
+      <a href="/jobs/new" class="btn btn-primary">Log a job</a>
+    </div>
+    {% endif %}
+    {% for job in summary.jobs[:5] %}
+    <a class="list-item" href="/jobs/{{ job.id }}/edit">
+      <div class="li-main">
+        <div class="li-title">{{ job.address or 'No address' }}</div>
+        <div class="li-sub">
+          {{ job.work_date|nice_date }}{% if job.order_number %} · #{{ job.order_number }}{% endif %}
+        </div>
+      </div>
+      <div class="li-amount">{{ job.total|money }}</div>
+      <div class="li-chev">›</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<div id="pending-note" class="card hidden">
+  <div class="card-body tight flex">
+    <span class="dot" style="color:var(--warning)"></span>
+    <span class="text-sm text-dim" id="pending-text"></span>
+  </div>
+</div>
+
+<div class="flex-between mt-2 mb-2">
+  <a href="/settings" class="btn btn-sm btn-ghost">Settings</a>
+  <span class="text-xs text-mute">Mercury Tracker v{{ app_version }}</span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import * as store from '/static/js/store.js';
+
+  // Anything still in the outbox is already counted on screen locally, but
+  // say so plainly rather than letting the totals look mysteriously ahead
+  // of what the server knows.
+  async function showPending() {
+    const count = await store.outboxCount();
+    const note = document.getElementById('pending-note');
+    if (!count) { note.classList.add('hidden'); return; }
+    document.getElementById('pending-text').textContent =
+      `${count} ${count === 1 ? 'entry is' : 'entries are'} saved on this device and waiting to sync.`;
+    note.classList.remove('hidden');
+  }
+  showPending();
+  document.addEventListener('mercury:synced', showPending);
+  document.addEventListener('mercury:queued', showPending);
+</script>
+{% endblock %}

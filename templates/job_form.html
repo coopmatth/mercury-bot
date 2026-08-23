@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set active_tab = 'jobs' %}
+{% block title %}{{ 'Edit job' if job else 'Log a job' }} · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>{{ 'Edit job' if job else 'Log a job' }}</h1>
+  <p>Saves to this device immediately — signal or not.</p>
+</div>
+
+<form id="job-form" autocomplete="off">
+  <input type="hidden" name="id" value="{{ job.id if job else '' }}">
+  <input type="hidden" name="created_at" value="{{ job.created_at if job else '' }}">
+
+  <div class="card">
+    <div class="card-body">
+      <div class="field">
+        <label for="work_date">Date worked</label>
+        <input type="date" id="work_date" name="work_date"
+               value="{{ job.work_date if job else today }}" required>
+      </div>
+
+      <div class="field">
+        <label for="address">Address</label>
+        <input type="text" id="address" name="address" inputmode="text"
+               placeholder="123 County Road 40" value="{{ job.address if job else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="order_number">Order number</label>
+        <input type="text" id="order_number" name="order_number" inputmode="text"
+               placeholder="e.g. 4471902" value="{{ job.order_number if job else '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Work performed</div>
+  <div class="card">
+    <div class="list" id="items">
+      {% for rate in rates %}
+      {% set qty = (job['items'].get(rate.item) if job else 0) or 0 %}
+      <div class="qty-row {{ 'active' if qty }}" data-item="{{ rate.item }}">
+        <div class="qty-info">
+          <div class="qty-name">{{ rate.item }}</div>
+          <div class="qty-rate">{{ rate.label }}</div>
+          <div class="qty-pay hidden"></div>
+        </div>
+        <div class="stepper">
+          <button type="button" class="step-btn minus" aria-label="Decrease {{ rate.item }}">−</button>
+          <input type="number" class="qty-input {{ 'wide' if rate.unit == 'ft' }}"
+                 inputmode="decimal"
+                 step="{{ '1' if rate.unit == 'ea' else '0.01' }}" min="0"
+                 value="{{ qty|qty if qty else '' }}" placeholder="0"
+                 aria-label="{{ rate.item }} quantity">
+          <button type="button" class="step-btn plus" aria-label="Increase {{ rate.item }}">+</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="field mb-0">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes"
+                  placeholder="Anything the office needs to know">{{ job.notes if job else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="sticky-actions">
+    <div class="total-bar">
+      <span class="label">Job total</span>
+      <span class="value" id="job-total">$0.00</span>
+    </div>
+    <div class="btn-stack">
+      <button type="submit" class="btn btn-primary btn-lg btn-block" id="save-btn">
+        {{ 'Save changes' if job else 'Save job' }}
+      </button>
+      {% if job %}
+      <button type="button" class="btn btn-danger btn-block" id="delete-btn"
+              data-confirm="Delete this job? This cannot be undone.">Delete job</button>
+      {% endif %}
+      <a href="{{ '/jobs' if job else '/' }}" class="btn btn-ghost btn-block">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/job-form.js"></script>
+{% endblock %}

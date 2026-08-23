@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% set active_tab = 'jobs' %}
+{% set hydrate_mode = 'custom' %}
+{% set week_start = week_start_iso %}{% set week_end = week_end_iso %}
+{% block title %}Custom pay · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>Custom pay items</h1>
+  <p>One-off work outside the standard rate card. Rolls into your weekly pay and the matching invoice automatically.</p>
+</div>
+
+<form id="custom-form" class="card" autocomplete="off">
+  <div class="card-body">
+    <div class="field">
+      <label for="name">Item name</label>
+      <input type="text" id="name" name="name" required placeholder="e.g. Extra wire run">
+    </div>
+    <div class="field">
+      <label for="description">Description</label>
+      <input type="text" id="description" name="description" placeholder="Optional detail for the invoice">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="qty">Quantity</label>
+        <input type="number" id="qty" name="qty" inputmode="decimal" step="0.01" min="0" value="1" required>
+      </div>
+      <div class="field">
+        <label for="rate">Rate ($)</label>
+        <input type="number" id="rate" name="rate" inputmode="decimal" step="0.01" min="0" placeholder="0.00" required>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="work_date">Date</label>
+        <input type="date" id="work_date" name="work_date" value="{{ today }}" required>
+      </div>
+      <div class="field">
+        <label for="bill_to">Bill to</label>
+        <select id="bill_to" name="bill_to">
+          <option value="mercury">Mercury invoice</option>
+          <option value="remc">REMC invoice</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="total-bar">
+      <span class="label">Line total</span>
+      <span class="value" id="line-total">$0.00</span>
+    </div>
+
+    <button type="submit" class="btn btn-success btn-lg btn-block" id="save-custom">Add item</button>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-head">
+    <span>This week</span>
+    <span class="spacer"></span>
+    <span class="badge" data-custom-count>{{ items|length }}</span>
+  </div>
+  <div class="list" data-custom-list>
+    {% if not items %}
+    <div class="empty">
+      <div class="empty-icon">✎</div>
+      <h3>No custom items yet</h3>
+      <p>Add anything billed outside the standard rates.</p>
+    </div>
+    {% endif %}
+    {% for item in items %}
+    <div class="list-item">
+      <div class="li-main">
+        <div class="li-title">{{ item.name }}</div>
+        <div class="li-sub">
+          {{ item.work_date|nice_date }} · {{ item.qty|qty }} × {{ item.rate|money }}
+          <span class="badge {{ 'badge-amber' if item.bill_to == 'remc' else 'badge-soft' }}"
+                style="margin-left:4px">{{ item.bill_to|upper }}</span>
+        </div>
+      </div>
+      <div class="li-amount">{{ item.total|money }}</div>
+      <button type="button" class="btn btn-sm btn-danger" data-delete-custom="{{ item.id }}"
+              data-confirm="Delete “{{ item.name }}”?">✕</button>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { saveCustomItem, removeRow, money, toast, buzz } from '/static/js/app.js';
+
+  const form = document.getElementById('custom-form');
+  const totalEl = document.getElementById('line-total');
+
+  const refresh = () => {
+    const qty = parseFloat(form.qty.value) || 0;
+    const rate = parseFloat(form.rate.value) || 0;
+    totalEl.textContent = money(qty * rate);
+  };
+  form.qty.addEventListener('input', refresh);
+  form.rate.addEventListener('input', refresh);
+  refresh();
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('save-custom');
+    button.disabled = true;
+    button.textContent = 'Saving…';
+    try {
+      await saveCustomItem({
+        name: form.name.value.trim(),
+        description: form.description.value.trim(),
+        qty: parseFloat(form.qty.value) || 0,
+        rate: parseFloat(form.rate.value) || 0,
+        work_date: form.work_date.value,
+        bill_to: form.bill_to.value,
+      });
+      buzz([12, 40, 12]);
+      toast(navigator.onLine ? 'Custom item added.'
+                             : 'Saved offline — will sync automatically.',
+            navigator.onLine ? 'success' : 'warning');
+      form.reset();
+      form.work_date.value = '{{ today }}';
+      refresh();
+      document.dispatchEvent(new CustomEvent('mercury:hydrate'));
+    } catch (error) {
+      toast(`Could not save: ${error.message}`, 'danger');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Add item';
+    }
+  });
+
+</script>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set active_tab = 'reports' %}
+{% block title %}{{ invoice.number }} · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>{{ invoice.number }}</h1>
+  <p>{{ 'Mercury' if invoice.kind == 'mercury' else 'REMC' }} invoice · generated {{ invoice.created_at[:10]|nice_date('%b %d, %Y') }}</p>
+</div>
+
+<div class="stat-grid mb-2">
+  <div class="stat accent-green">
+    <div class="stat-label">Balance due</div>
+    <div class="stat-value text-green">{{ invoice.total|money }}</div>
+  </div>
+  <div class="stat accent-amber">
+    <div class="stat-label">Due date</div>
+    <div class="stat-value sm text-amber">{{ invoice.due_date }}</div>
+    {% if invoice.period_start %}
+    <div class="stat-sub">{{ invoice.period_start|nice_date('%b %d') }} – {{ invoice.period_end|nice_date('%b %d') }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span>Preview</span>
+    <span class="spacer"></span>
+    {% if invoice.emailed_at %}<span class="badge badge-green">Emailed</span>{% endif %}
+  </div>
+  <div class="card-body" style="padding:0">
+    <object data="/invoice/{{ invoice.id }}/pdf#view=FitH" type="application/pdf"
+            style="width:100%;height:66vh;border:0;background:#fff">
+      <div class="empty">
+        <div class="empty-icon">▤</div>
+        <h3>Preview unavailable here</h3>
+        <p>Your browser can't display PDFs inline. Open or download it instead.</p>
+        <a class="btn btn-primary" href="/invoice/{{ invoice.id }}/pdf" target="_blank" rel="noopener">Open the PDF</a>
+      </div>
+    </object>
+  </div>
+</div>
+
+<div class="btn-stack mb-2">
+  <button class="btn btn-primary btn-lg btn-block" id="email-btn" data-requires-online>
+    Email to the contractor
+  </button>
+  <div class="btn-row">
+    <a class="btn btn-outline" href="/invoice/{{ invoice.id }}/pdf?download=1">Download</a>
+    <a class="btn btn-ghost" href="/reports">Back to reports</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { toast } from '/static/js/app.js';
+
+  document.getElementById('email-btn').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Sending…';
+    try {
+      const response = await fetch('/api/invoice/{{ invoice.id }}/email', { method: 'POST' });
+      const data = await response.json();
+      if (data.ok) {
+        toast(data.message, 'success', 5000);
+        button.textContent = 'Emailed ✓';
+      } else {
+        toast(data.error, 'danger', 7000);
+        button.disabled = false;
+        button.textContent = 'Email to the contractor';
+      }
+    } catch (error) {
+      toast(`Could not send: ${error.message}`, 'danger');
+      button.disabled = false;
+      button.textContent = 'Email to the contractor';
+    }
+  });
+</script>
+{% endblock %}

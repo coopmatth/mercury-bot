@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% set active_tab = 'reports' %}
+{% block title %}Reports · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>Reports &amp; invoices</h1>
+  <p>{{ summary.range_label }} · {{ summary.weekly|money }} earned</p>
+</div>
+
+{% if weeks|length > 1 %}
+<form method="get" action="/reports" class="mb-2">
+  <select name="week" onchange="this.form.submit()" aria-label="Choose a pay week">
+    {% for w in weeks %}
+      <option value="{{ w.start }}" {{ 'selected' if w.start == selected_week }}>
+        {{ w.label }}{{ ' · current' if w.is_current }}
+      </option>
+    {% endfor %}
+  </select>
+</form>
+{% endif %}
+
+{% if not email_configured %}
+<div class="card">
+  <div class="card-body tight flex">
+    <span class="dot" style="color:var(--warning)"></span>
+    <span class="text-sm text-dim">
+      Email isn't configured yet — set <span class="mono">SENDER_EMAIL</span> and
+      <span class="mono">EMAIL_PASSWORD</span> in <span class="mono">.env</span>.
+      Downloads work regardless.
+    </span>
+  </div>
+</div>
+{% endif %}
+
+<div class="section-label">Spreadsheets</div>
+<div class="card">
+  <div class="card-body">
+    <p class="text-sm text-dim mt-0 mb-2">
+      Generated fresh from your data every time, so they always match what the app shows.
+    </p>
+    <div class="section-label mt-0">Contractor sheet — quantities only</div>
+    <div class="btn-row mb-2">
+      <a class="btn btn-outline" href="/api/export/contractor?start={{ selected_week }}">Download</a>
+      <button class="btn btn-primary" data-email="contractor" data-requires-online>Email GC</button>
+    </div>
+    <div class="section-label mt-0">Pay sheet — with your totals</div>
+    <div class="btn-row">
+      <a class="btn btn-outline" href="/api/export/personal?start={{ selected_week }}">Download</a>
+      <button class="btn btn-primary" data-email="personal" data-requires-online>Email me</button>
+    </div>
+  </div>
+</div>
+
+<div class="section-label">Generate an invoice</div>
+
+<div class="card">
+  <div class="card-head"><span>Mercury invoice</span><span class="spacer"></span>
+    <span class="badge">{{ summary.job_count }} jobs</span></div>
+  <form method="post" action="/invoice/mercury?week={{ selected_week }}">
+    <div class="card-body">
+      <p class="text-sm text-dim mt-0">
+        Every job this week, priced at your rate card, plus any custom items billed to Mercury.
+      </p>
+      <div class="field-row">
+        <div class="field">
+          <label for="m-due">Due date</label>
+          <input type="text" id="m-due" name="due_date" value="{{ default_due }}" placeholder="MM/DD/YY">
+        </div>
+        <div class="field">
+          <label>Estimated total</label>
+          <input type="text" value="{{ summary.weekly|money }}" disabled>
+        </div>
+      </div>
+
+      <div class="section-label mt-0">Extra lines (optional)</div>
+      <div data-line-rows></div>
+      <button type="button" class="btn btn-sm btn-ghost btn-block mb-2" data-add-line>+ Add a line</button>
+
+      <div class="field">
+        <label for="m-notes">Notes on the invoice</label>
+        <input type="text" id="m-notes" name="notes" placeholder="Optional">
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg btn-block" data-requires-online>
+        Generate Mercury invoice
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-head"><span>REMC invoice</span><span class="spacer"></span>
+    {% set remc_count = summary.customs|selectattr('bill_to', 'equalto', 'remc')|list|length %}
+    <span class="badge badge-amber">{{ remc_count }} {{ 'item' if remc_count == 1 else 'items' }}</span></div>
+  <form method="post" action="/invoice/remc?week={{ selected_week }}">
+    <div class="card-body">
+      <p class="text-sm text-dim mt-0">
+        Custom items flagged REMC, plus anything you type below.
+      </p>
+      <div class="field">
+        <label for="r-due">Due date</label>
+        <input type="text" id="r-due" name="due_date" value="{{ default_due }}" placeholder="MM/DD/YY">
+      </div>
+
+      <div class="section-label mt-0">Extra lines (optional)</div>
+      <div data-line-rows></div>
+      <button type="button" class="btn btn-sm btn-ghost btn-block mb-2" data-add-line>+ Add a line</button>
+
+      <div class="field">
+        <label for="r-notes">Notes on the invoice</label>
+        <input type="text" id="r-notes" name="notes" placeholder="Optional">
+      </div>
+
+      <button type="submit" class="btn btn-warning btn-lg btn-block" data-requires-online>
+        Generate REMC invoice
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-head"><span>Invoice history</span><span class="spacer"></span>
+    <span class="badge badge-soft">{{ invoices|length }}</span></div>
+  {% if invoices %}
+  <div class="list">
+    {% for invoice in invoices %}
+    <a class="list-item" href="/invoice/{{ invoice.id }}">
+      <div class="li-main">
+        <div class="li-title">{{ invoice.number }}</div>
+        <div class="li-sub">
+          {{ 'Mercury' if invoice.kind == 'mercury' else 'REMC' }} · due {{ invoice.due_date }}
+          {% if invoice.emailed_at %}· <span class="text-green">emailed</span>{% endif %}
+        </div>
+      </div>
+      <div class="li-amount">{{ invoice.total|money }}</div>
+      <div class="li-chev">›</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">▤</div>
+    <h3>No invoices yet</h3>
+    <p>Generate one once the week's work is logged.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { toast } from '/static/js/app.js';
+
+  // Repeatable description/qty/rate rows for one-off invoice lines.
+  document.querySelectorAll('[data-add-line]').forEach((button) => {
+    const host = button.previousElementSibling;
+    button.addEventListener('click', () => {
+      const row = document.createElement('div');
+      row.className = 'field-row mb-1';
+      row.style.gridTemplateColumns = '1fr 68px 82px 40px';
+      row.innerHTML = `
+        <input type="text" name="desc[]" placeholder="Description">
+        <input type="number" name="qty[]" step="0.01" inputmode="decimal" placeholder="Qty" value="1">
+        <input type="number" name="rate[]" step="0.01" inputmode="decimal" placeholder="Rate">
+        <button type="button" class="btn btn-ghost" style="min-height:50px;padding:0">✕</button>`;
+      row.querySelector('button').addEventListener('click', () => row.remove());
+      host.appendChild(row);
+      row.querySelector('input').focus();
+    });
+  });
+
+  document.querySelectorAll('[data-email]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const kind = button.dataset.email;
+      const week = new URLSearchParams(location.search).get('week') || '';
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Sending…';
+      try {
+        const response = await fetch(`/api/email/${kind}?start=${week}`, { method: 'POST' });
+        const data = await response.json();
+        toast(data.ok ? data.message : data.error, data.ok ? 'success' : 'danger', 6000);
+      } catch (error) {
+        toast(`Could not send: ${error.message}`, 'danger');
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    });
+  });
+</script>
+{% endblock %}

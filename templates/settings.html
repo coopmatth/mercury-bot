@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set active_tab = '' %}
+{% block title %}Settings · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>Settings</h1>
+  <p>Configuration lives in <span class="mono">.env</span> on the server — nothing sensitive is stored in the app or the browser.</p>
+</div>
+
+<div class="card">
+  <div class="card-head"><span>Sync</span></div>
+  <div class="card-body">
+    <div class="flex-between mb-1"><span class="text-dim">Server revision</span><strong class="mono">{{ server_seq }}</strong></div>
+    <div class="flex-between mb-1"><span class="text-dim">This device</span><strong class="mono text-xs" id="device-id">—</strong></div>
+    <div class="flex-between mb-1"><span class="text-dim">Waiting to sync</span><strong id="pending-count">—</strong></div>
+    <div class="flex-between mb-2"><span class="text-dim">Last sync</span><strong id="last-sync">—</strong></div>
+    <div class="btn-stack">
+      <button class="btn btn-primary btn-block" id="sync-btn" data-requires-online>Sync now</button>
+      <button class="btn btn-danger btn-block" id="reset-btn"
+              data-confirm="Clear this device's local copy and re-download everything from the server? Anything still waiting to sync will be lost.">
+        Reset local data
+      </button>
+    </div>
+  </div>
+</div>
+
+{% if devices %}
+<div class="card">
+  <div class="card-head"><span>Devices seen</span><span class="spacer"></span>
+    <span class="badge badge-soft">{{ devices|length }}</span></div>
+  <div class="list">
+    {% for device in devices %}
+    <div class="list-item">
+      <div class="li-main">
+        <div class="li-title mono text-sm">{{ device.device_id[:8] }}…</div>
+        <div class="li-sub">{{ device.pushes }} syncs · last seen {{ device.last_seen[:16]|replace('T', ' ') }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-head"><span>Rate card</span></div>
+  <div class="list">
+    {% for rate in rates %}
+    <div class="list-item">
+      <div class="li-main"><div class="li-title">{{ rate.item }}</div></div>
+      <div class="text-sm text-dim nowrap">{{ rate.label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="card-body tight">
+    <p class="text-xs text-mute mb-0">
+      Rates live in <span class="mono">mercury/rates.py</span> and are mirrored in
+      <span class="mono">static/js/app.js</span> so offline totals match. Change both together.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span>Configuration</span></div>
+  <div class="list">
+    <div class="list-item"><div class="li-main"><div class="li-title">Technician</div></div>
+      <div class="text-sm text-dim">{{ config.tech_name }}</div></div>
+    <div class="list-item"><div class="li-main"><div class="li-title">Contractor email</div></div>
+      <div class="text-sm text-dim">{{ config.contractor_email or 'not set' }}</div></div>
+    <div class="list-item"><div class="li-main"><div class="li-title">Your email</div></div>
+      <div class="text-sm text-dim">{{ config.your_email or 'not set' }}</div></div>
+    <div class="list-item"><div class="li-main"><div class="li-title">SMTP</div></div>
+      <div class="text-sm text-dim">
+        {{ config.smtp_server if email_configured else 'not configured' }}
+      </div></div>
+    <div class="list-item"><div class="li-main"><div class="li-title">AI scanning</div></div>
+      <div class="text-sm {{ 'text-green' if ai_available else 'text-dim' }}">
+        {{ config.gemini_model if ai_available else 'off — OCR only' }}
+      </div></div>
+    <div class="list-item"><div class="li-main"><div class="li-title">Data directory</div></div>
+      <div class="text-sm text-dim mono text-xs">{{ config.data_dir }}</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span>Backup</span></div>
+  <div class="card-body">
+    <p class="text-sm text-dim mt-0">
+      Downloads the whole database as a single SQLite file. Keep a copy somewhere off this machine.
+    </p>
+    <a class="btn btn-outline btn-block" href="/settings/backup">Download a backup</a>
+  </div>
+</div>
+
+<p class="text-xs text-mute text-center mb-2" style="text-align:center">
+  Mercury Tracker v{{ app_version }}
+</p>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { store, sync, toast } from '/static/js/app.js';
+
+  async function refresh() {
+    document.getElementById('device-id').textContent = (await store.deviceId()).slice(0, 13) + '…';
+    document.getElementById('pending-count').textContent = await store.outboxCount();
+    const last = await store.meta('last_sync');
+    document.getElementById('last-sync').textContent =
+      last ? new Date(last).toLocaleString() : 'never';
+  }
+  refresh();
+
+  document.getElementById('sync-btn').addEventListener('click', async () => {
+    const result = await sync.syncNow();
+    if (result.error) toast(`Sync failed: ${result.error}`, 'danger');
+    else toast(`Pushed ${result.pushed || 0}, pulled ${result.pulled || 0}.`, 'success');
+    refresh();
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', async () => {
+    await store.resetLocal();
+    toast('Local data cleared. Re-syncing from the server…', 'warning');
+    await sync.syncNow();
+    window.location.reload();
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% set active_tab = 'scanner' %}
+{% block title %}Equipment scanner · Mercury{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/tesseract/tesseract.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>Equipment scanner</h1>
+  <p>
+    Photograph the ONT and gateway labels. Online it reads them with AI;
+    offline it falls back to on-device OCR — same output block either way.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span>Label photos</span>
+    <span class="spacer"></span>
+    <span id="engine-pill" class="pill pill-syncing"><span class="dot"></span><span>Checking…</span></span>
+  </div>
+  <div class="card-body">
+    <div class="field">
+      <label for="files">Select or take photos</label>
+      <input type="file" id="files" accept="image/*" multiple capture="environment">
+      <div class="hint">Fill the frame with the label. Multiple photos are combined into one result.</div>
+    </div>
+
+    <div id="thumbs" class="flex wrap mb-2"></div>
+
+    <button id="scan-btn" class="btn btn-warning btn-lg btn-block" disabled>Read labels</button>
+
+    <div id="progress-wrap" class="hidden mt-2">
+      <div class="flex mb-1">
+        <div class="spinner"></div>
+        <span class="text-sm text-dim" id="progress-text">Working…</span>
+      </div>
+      <div class="progress"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<div id="result-card" class="card hidden">
+  <div class="card-head">
+    <span>Output block</span>
+    <span class="spacer"></span>
+    <span id="result-source" class="badge badge-soft"></span>
+  </div>
+  <div class="card-body">
+    <textarea id="output" class="code-block" spellcheck="false"
+              aria-label="Parsed equipment details"></textarea>
+    <div class="hint mb-2">Editable — fill in light levels and the rest before you copy.</div>
+    <div class="btn-stack">
+      <button id="copy-btn" class="btn btn-success btn-lg btn-block">Copy to clipboard</button>
+      <button id="save-scan-btn" class="btn btn-outline btn-block">Save to history</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span>Recent scans</span>
+    <span class="spacer"></span>
+    <span class="badge badge-soft" id="scan-count">0</span>
+  </div>
+  <div class="list" id="scan-list">
+    <div class="empty">
+      <div class="empty-icon">⧉</div>
+      <h3>No saved scans</h3>
+      <p>Saved scans stay on this device and sync when you have signal.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/scanner.js"></script>
+{% endblock %}

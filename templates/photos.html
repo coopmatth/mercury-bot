@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set active_tab = '' %}
+{% block title %}Photo compressor · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>Photo compressor</h1>
+  <p>Shrink job photos before uploading them over a weak connection. Runs entirely on this device — nothing is sent anywhere.</p>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="field">
+      <label for="photo-files">Photos</label>
+      <input type="file" id="photo-files" accept="image/*" multiple>
+    </div>
+
+    <div class="field">
+      <label for="preset">Target size</label>
+      <select id="preset">
+        <option value="1280:0.72">Upload friendly — 1280 px, smallest</option>
+        <option value="1600:0.8" selected>Balanced — 1600 px</option>
+        <option value="2048:0.86">High detail — 2048 px</option>
+      </select>
+      <div class="hint">Balanced is plenty for label and NID photos.</div>
+    </div>
+
+    <button id="compress-btn" class="btn btn-primary btn-lg btn-block" disabled>Compress photos</button>
+  </div>
+</div>
+
+<div id="summary" class="card hidden">
+  <div class="card-body">
+    <div class="flex-between mb-1"><span class="text-dim">Original</span><strong id="size-before">—</strong></div>
+    <div class="flex-between mb-1"><span class="text-dim">Compressed</span><strong class="text-green" id="size-after">—</strong></div>
+    <div class="divider"></div>
+    <div class="flex-between"><span class="text-dim">Saved</span><strong class="text-accent" id="size-saved">—</strong></div>
+  </div>
+</div>
+
+<div id="results" class="card hidden">
+  <div class="card-head"><span>Compressed photos</span><span class="spacer"></span>
+    <button id="download-all" class="btn btn-sm btn-outline">Save all</button>
+  </div>
+  <div class="list" id="result-list"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/photos.js"></script>
+{% endblock %}

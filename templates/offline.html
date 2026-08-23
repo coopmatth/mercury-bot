@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set active_tab = '' %}
+{% block title %}Offline · Mercury{% endblock %}
+{% block content %}
+<div class="empty" style="padding-top:80px">
+  <div class="empty-icon">⛰</div>
+  <h3>This screen isn't cached yet</h3>
+  <p>
+    Your saved jobs are safe on this device. Open this page once while you have
+    signal and it will be available offline from then on.
+  </p>
+  <div class="btn-stack" style="max-width:320px;margin:0 auto">
+    <a href="/" class="btn btn-primary btn-block">Go to the dashboard</a>
+    <a href="/jobs/new" class="btn btn-ghost btn-block">Log a job offline</a>
+  </div>
+</div>
+{% endblock %}

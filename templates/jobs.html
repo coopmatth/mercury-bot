@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set active_tab = 'jobs' %}
+{% set hydrate_mode = 'jobs' %}
+{% set week_start = summary.start %}{% set week_end = summary.end %}
+{% block title %}Jobs · Mercury{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>Jobs</h1>
+  <p>{{ summary.range_label }} · <span data-summary-line>{{ summary.job_count }} logged · {{ summary.jobs_total|money }}</span></p>
+</div>
+
+<form method="get" action="/jobs" class="mb-2">
+  <div class="field mb-1">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search address, order number or notes">
+  </div>
+  {% if weeks|length > 1 %}
+  <select name="week" onchange="this.form.submit()" aria-label="Choose a pay week">
+    {% for w in weeks %}
+      <option value="{{ w.start }}" {{ 'selected' if w.start == selected_week }}>
+        {{ w.label }}{{ ' · current' if w.is_current }}
+      </option>
+    {% endfor %}
+  </select>
+  {% endif %}
+</form>
+
+<div class="card">
+  <div class="card-head">
+    <span>Logged work</span>
+    <span class="spacer"></span>
+    <a href="/jobs/new" class="btn btn-sm btn-outline">+ New</a>
+  </div>
+  <div class="list" data-job-list>
+    {% if not summary.jobs %}
+    <div class="empty">
+      <div class="empty-icon">☰</div>
+      <h3>{{ 'No matches' if query else 'No jobs this week' }}</h3>
+      <p>{{ 'Try a different search term.' if query else 'Log your first job of the week.' }}</p>
+      <a href="/jobs/new" class="btn btn-primary">Log a job</a>
+    </div>
+    {% endif %}
+    {% for job in summary.jobs %}
+    <a class="list-item" href="/jobs/{{ job.id }}/edit">
+      <div class="li-main">
+        <div class="li-title">{{ job.address or 'No address' }}</div>
+        <div class="li-sub">
+          {{ job.work_date|nice_date }}{% if job.order_number %} · #{{ job.order_number }}{% endif %}
+          · {{ job['items']|length }} {{ 'line' if job['items']|length == 1 else 'lines' }}
+        </div>
+      </div>
+      <div class="li-amount">{{ job.total|money }}</div>
+      <div class="li-chev">›</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card {{ '' if summary.customs else 'hidden' }}">
+  <div class="card-head">
+    <span>Custom pay items</span>
+    <span class="spacer"></span>
+    <a href="/custom" class="btn btn-sm btn-ghost">Manage</a>
+  </div>
+  <div class="list" data-custom-list>
+    {% for item in summary.customs %}
+    <div class="list-item">
+      <div class="li-main">
+        <div class="li-title">{{ item.name }}</div>
+        <div class="li-sub">
+          {{ item.work_date|nice_date }} · {{ item.qty|qty }} × {{ item.rate|money }}
+          {% if item.bill_to == 'remc' %}· REMC{% endif %}
+        </div>
+      </div>
+      <div class="li-amount">{{ item.total|money }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><span>Week totals</span></div>
+  <div class="card-body">
+    <div class="flex-between mb-1"><span class="text-dim">Jobs</span><strong data-total="jobs">{{ summary.jobs_total|money }}</strong></div>
+    <div class="flex-between mb-1"><span class="text-dim">Custom items</span><strong data-total="custom">{{ summary.custom_total|money }}</strong></div>
+    <div class="divider"></div>
+    <div class="flex-between">
+      <span class="text-dim">Total</span>
+      <strong class="text-green" style="font-size:20px" data-total="week">{{ summary.weekly|money }}</strong>
+    </div>
+  </div>
+</div>
+{% endblock %}

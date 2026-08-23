@@ -25,6 +25,23 @@
   </div>
 </div>
 
+{% if devices %}
+<div class="card">
+  <div class="card-head"><span>Devices seen</span><span class="spacer"></span>
+    <span class="badge badge-soft">{{ devices|length }}</span></div>
+  <div class="list">
+    {% for device in devices %}
+    <div class="list-item">
+      <div class="li-main">
+        <div class="li-title mono text-sm">{{ device.device_id[:8] }}…</div>
+        <div class="li-sub">{{ device.pushes }} syncs · last seen {{ device.last_seen[:16]|replace('T', ' ') }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="card">
   <div class="card-head">
     <span>Rate Card &amp; Charge Codes</span>
@@ -56,10 +73,23 @@
   <div class="list">
     <div class="list-item"><div class="li-main"><div class="li-title">Technician</div></div>
       <div class="text-sm text-dim">{{ config.tech_name }}</div></div>
-    <div class="list-item"><div class="li-main"><div class="li-title">Contractor email</div></div>
-      <div class="text-sm text-dim">{{ config.contractor_email or 'not set' }}</div></div>
-    <div class="list-item"><div class="li-main"><div class="li-title">Your email</div></div>
-      <div class="text-sm text-dim">{{ config.your_email or 'not set' }}</div></div>
+    
+    <div class="list-item flex-between">
+      <div class="li-main">
+        <div class="li-title">Contractor email</div>
+        <div class="text-sm text-dim">{{ config.contractor_email or 'not set' }}</div>
+      </div>
+      <button class="btn btn-sm btn-ghost edit-email-btn" data-type="contractor_email" data-val="{{ config.contractor_email }}">Edit</button>
+    </div>
+
+    <div class="list-item flex-between">
+      <div class="li-main">
+        <div class="li-title">Your email</div>
+        <div class="text-sm text-dim">{{ config.your_email or 'not set' }}</div>
+      </div>
+      <button class="btn btn-sm btn-ghost edit-email-btn" data-type="your_email" data-val="{{ config.your_email }}">Edit</button>
+    </div>
+
     <div class="list-item"><div class="li-main"><div class="li-title">SMTP</div></div>
       <div class="text-sm text-dim">
         {{ config.smtp_server if email_configured else 'not configured' }}
@@ -72,6 +102,41 @@
       <div class="text-sm text-dim mono text-xs">{{ config.data_dir }}</div></div>
   </div>
 </div>
+
+{% if demo_mode %}
+<div class="card" style="border-color: rgba(251,191,36,.4)">
+  <div class="card-head"><span>Demo sandbox</span><span class="spacer"></span>
+    <span class="badge badge-amber">active</span></div>
+  <div class="card-body">
+    <p class="text-sm text-dim mt-0">
+      This instance uses its own database (<span class="mono">data/demo/</span>),
+      a fictional technician identity, and never contacts a mail server —
+      "sent" reports land in <span class="mono">data/demo/outbox</span> as
+      <span class="mono">.eml</span> files you can open.
+    </p>
+    <form method="post" action="/settings/demo-reset">
+      <button class="btn btn-warning btn-block" type="submit"
+              data-confirm="Wipe the demo database and regenerate fresh sample data?">
+        Reset demo data
+      </button>
+    </form>
+    <p class="text-xs text-mute mb-0 mt-1">
+      Also use “Reset local data” above on each device, so the phone's copy
+      matches the server's.
+    </p>
+  </div>
+</div>
+{% endif %}
+
+{% if ai_load_error %}
+<div class="card" style="border-color: rgba(248,113,113,.4)">
+  <div class="card-head"><span>AI scanning</span><span class="spacer"></span>
+    <span class="badge" style="background:rgba(248,113,113,.16);color:var(--danger)">unavailable</span></div>
+  <div class="card-body">
+    <p class="text-sm text-dim mt-0 mb-0">{{ ai_load_error }}</p>
+  </div>
+</div>
+{% endif %}
 
 {% if ai_available %}
 <div class="card">
@@ -95,7 +160,7 @@
     <p class="text-sm text-dim mt-0">
       Downloads the whole database as a single SQLite file. Keep a copy somewhere off this machine.
     </p>
-    <a class="btn btn-outline btn-block" href="/settings/backup" target="_blank">Download a backup</a>
+    <a class="btn btn-outline btn-block" href="/settings/backup" target="_blank" download>Download a backup</a>
   </div>
 </div>
 
@@ -124,7 +189,6 @@
     refresh();
   });
 
-  // Rate Editing
   document.querySelectorAll('.edit-rate-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
@@ -146,7 +210,6 @@
     });
   });
 
-  // Add Code
   document.getElementById('add-code-btn')?.addEventListener('click', async () => {
     const name = window.prompt("New Charge Code Name:");
     if (!name) return;
@@ -165,7 +228,6 @@
     }
   });
 
-  // Delete Rate
   document.querySelectorAll('.del-rate-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!window.confirm(`Delete charge code "${btn.dataset.name}"?`)) return;
@@ -177,7 +239,30 @@
     });
   });
 
-  // Check models
+  document.querySelectorAll('.edit-email-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const type = btn.dataset.type;
+      const displayType = type === 'contractor_email' ? 'Contractor' : 'Your';
+      const newVal = window.prompt(`Enter new ${displayType} Email:`, btn.dataset.val);
+      
+      if (newVal !== null) {
+        const payload = {};
+        payload[type] = newVal.trim();
+        
+        const res = await fetch('/api/settings/emails', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        
+        if (res.ok) {
+          toast(`${displayType} email updated!`, 'success');
+          setTimeout(() => location.reload(), 800);
+        }
+      }
+    });
+  });
+
   document.getElementById('check-models')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     const host = document.getElementById('model-list');

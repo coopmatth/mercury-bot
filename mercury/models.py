@@ -11,36 +11,21 @@ from .rates import (AERIAL_ITEM, ITEM_LIST, PAY_RATES, aerial_tier,
 
 DATE_FMT = "%Y-%m-%d"
 
-
-# --------------------------------------------------------------------------
-# Week math. The pay week runs Sunday -> Saturday, matching the original.
-# --------------------------------------------------------------------------
-
 def week_start(for_date: date | None = None) -> date:
     d = for_date or date.today()
-    # Monday=0 ... Sunday=6. Config.WEEK_START_WEEKDAY defaults to 6 (Sunday).
     offset = (d.weekday() - Config.WEEK_START_WEEKDAY) % 7
     return d - timedelta(days=offset)
-
 
 def week_bounds(for_date: date | None = None) -> tuple[date, date]:
     start = week_start(for_date)
     return start, start + timedelta(days=6)
 
-
 def last_completed_week(for_date: date | None = None) -> tuple[date, date]:
-    """The most recent pay week that has finished.
-
-    Invoices bill a closed week, so this is what the Reports screen bills by
-    default: on any day of the week beginning 08/23, that is 08/16 - 08/22.
-    """
     start = week_start(for_date) - timedelta(days=7)
     return start, start + timedelta(days=6)
 
-
 def week_label(start: date, end: date) -> str:
     return f"{start.strftime('%m-%d-%y')}_to_{end.strftime('%m-%d-%y')}"
-
 
 def parse_date(value: str | None, fallback: date | None = None) -> date:
     if not value:
@@ -52,17 +37,13 @@ def parse_date(value: str | None, fallback: date | None = None) -> date:
             continue
     return fallback or date.today()
 
-
 def recent_weeks(limit: int = 12) -> list[dict]:
-    """Weeks that actually contain data, newest first, plus the current one."""
     conn = get_db()
     rows = conn.execute(
         "SELECT work_date FROM jobs WHERE deleted = 0 "
         "UNION SELECT work_date FROM custom_items WHERE deleted = 0"
     ).fetchall()
     starts = {week_start(parse_date(r["work_date"])) for r in rows}
-    # Always offer the current week and the one being invoiced, even if
-    # neither has any work logged against it yet.
     starts.add(week_start())
     starts.add(last_completed_week()[0])
     ordered = sorted(starts, reverse=True)[:limit]
@@ -76,13 +57,7 @@ def recent_weeks(limit: int = 12) -> list[dict]:
         for s in ordered
     ]
 
-
-# --------------------------------------------------------------------------
-# Jobs
-# --------------------------------------------------------------------------
-
 def normalize_items(raw: dict | None) -> dict:
-    """Keep only known items with a positive quantity."""
     items = {}
     for name, qty in (raw or {}).items():
         if name not in ITEM_LIST:
@@ -95,36 +70,35 @@ def normalize_items(raw: dict | None) -> dict:
             items[name] = value
     return items
 
-
 def save_job(payload: dict, device_id: str = "") -> dict:
-    """Insert or update a job. Idempotent on ``id`` so replayed offline
-    pushes never duplicate a row."""
     conn = get_db()
     job_id = (payload.get("id") or "").strip() or new_id()
     items = normalize_items(payload.get("items"))
     total = calculate_job_total(items)
     now = utcnow()
     updated_at = payload.get("updated_at") or now
+    needs_buried = 1 if payload.get("needs_buried") in (1, True, "1", "true") else 0
+    needs_bore = 1 if payload.get("needs_bore") in (1, True, "1", "true") else 0
 
     with conn:
         existing = conn.execute(
             "SELECT updated_at FROM jobs WHERE id = ?", (job_id,)).fetchone()
         if existing and existing["updated_at"] > updated_at:
-            # A newer version is already stored; the incoming copy is stale.
             return get_job(job_id)
 
         seq = next_seq(conn)
         conn.execute(
             """
             INSERT INTO jobs (id, work_date, address, order_number, notes, items,
-                              total, status, created_at, updated_at, deleted, device_id, seq)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              total, needs_buried, needs_bore, status, created_at, updated_at, deleted, device_id, seq)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 work_date=excluded.work_date, address=excluded.address,
                 order_number=excluded.order_number, notes=excluded.notes,
-                items=excluded.items, total=excluded.total, status=excluded.status,
-                updated_at=excluded.updated_at, deleted=excluded.deleted,
-                device_id=excluded.device_id, seq=excluded.seq
+                items=excluded.items, total=excluded.total,
+                needs_buried=excluded.needs_buried, needs_bore=excluded.needs_bore,
+                status=excluded.status, updated_at=excluded.updated_at,
+                deleted=excluded.deleted, device_id=excluded.device_id, seq=excluded.seq
             """,
             (
                 job_id,
@@ -134,6 +108,8 @@ def save_job(payload: dict, device_id: str = "") -> dict:
                 (payload.get("notes") or "").strip(),
                 json.dumps(items),
                 total,
+                needs_buried,
+                needs_bore,
                 payload.get("status") or "complete",
                 payload.get("created_at") or now,
                 updated_at,
@@ -144,11 +120,9 @@ def save_job(payload: dict, device_id: str = "") -> dict:
         )
     return get_job(job_id)
 
-
 def get_job(job_id: str) -> dict | None:
     row = get_db().execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     return row_to_dict(row) if row else None
-
 
 def list_jobs(start: date | None = None, end: date | None = None,
               search: str = "", limit: int = 500) -> list[dict]:
@@ -168,7 +142,6 @@ def list_jobs(start: date | None = None, end: date | None = None,
     args.append(limit)
     return [row_to_dict(r) for r in get_db().execute(sql, args).fetchall()]
 
-
 def delete_job(job_id: str, device_id: str = "") -> bool:
     conn = get_db()
     with conn:
@@ -178,11 +151,6 @@ def delete_job(job_id: str, device_id: str = "") -> bool:
             (utcnow(), seq, device_id, job_id),
         )
     return cur.rowcount > 0
-
-
-# --------------------------------------------------------------------------
-# Custom pay items
-# --------------------------------------------------------------------------
 
 def save_custom_item(payload: dict, device_id: str = "") -> dict | None:
     conn = get_db()
@@ -230,12 +198,10 @@ def save_custom_item(payload: dict, device_id: str = "") -> dict | None:
         )
     return get_custom_item(item_id)
 
-
 def get_custom_item(item_id: str) -> dict | None:
     row = get_db().execute(
         "SELECT * FROM custom_items WHERE id = ?", (item_id,)).fetchone()
     return row_to_dict(row) if row else None
-
 
 def list_custom_items(start: date | None = None, end: date | None = None,
                       bill_to: str | None = None) -> list[dict]:
@@ -253,7 +219,6 @@ def list_custom_items(start: date | None = None, end: date | None = None,
     sql += " ORDER BY work_date DESC, created_at DESC"
     return [row_to_dict(r) for r in get_db().execute(sql, args).fetchall()]
 
-
 def delete_custom_item(item_id: str, device_id: str = "") -> bool:
     conn = get_db()
     with conn:
@@ -263,11 +228,6 @@ def delete_custom_item(item_id: str, device_id: str = "") -> bool:
             (utcnow(), seq, device_id, item_id),
         )
     return cur.rowcount > 0
-
-
-# --------------------------------------------------------------------------
-# Equipment scans
-# --------------------------------------------------------------------------
 
 def save_scan(payload: dict, device_id: str = "") -> dict:
     conn = get_db()
@@ -302,13 +262,11 @@ def save_scan(payload: dict, device_id: str = "") -> dict:
         "SELECT * FROM equipment_scans WHERE id = ?", (scan_id,)).fetchone()
     return row_to_dict(row)
 
-
 def list_scans(limit: int = 100) -> list[dict]:
     rows = get_db().execute(
         "SELECT * FROM equipment_scans WHERE deleted = 0 "
         "ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     return [row_to_dict(r) for r in rows]
-
 
 def delete_scan(scan_id: str, device_id: str = "") -> bool:
     conn = get_db()
@@ -320,13 +278,7 @@ def delete_scan(scan_id: str, device_id: str = "") -> bool:
         )
     return cur.rowcount > 0
 
-
-# --------------------------------------------------------------------------
-# Aggregates
-# --------------------------------------------------------------------------
-
 def week_summary(start: date, end: date) -> dict:
-    """Everything the dashboard shows for one pay week."""
     jobs = list_jobs(start, end)
     customs = list_custom_items(start, end)
     today_str = date.today().strftime(DATE_FMT)
@@ -385,13 +337,7 @@ def week_summary(start: date, end: date) -> dict:
         "customs": customs,
     }
 
-
 def invoice_lines(start: date, end: date, extra_items: list[dict] | None = None) -> tuple[list[dict], float]:
-    """Roll a week's jobs up into priced invoice lines.
-
-    Flat-rate items collapse into one line each. Aerial drops group by tier,
-    because each drop is priced as a unit, not by the foot.
-    """
     from .rates import (AERIAL_TIER_1_PRICE, AERIAL_TIER_2_PRICE,
                         aerial_drop_price)
 
@@ -431,7 +377,6 @@ def invoice_lines(start: date, end: date, extra_items: list[dict] | None = None)
                 "amount": round(len(drops) * price, 2),
             })
 
-    # Over 600 ft is priced per drop, so each one is its own line.
     for feet in aerial["601+"]:
         price = aerial_drop_price(feet)
         lines.append({
@@ -452,7 +397,6 @@ def invoice_lines(start: date, end: date, extra_items: list[dict] | None = None)
         })
 
     return lines, round(sum(l["amount"] for l in lines), 2)
-
 
 def custom_items_as_lines(items: list[dict]) -> list[dict]:
     lines = []

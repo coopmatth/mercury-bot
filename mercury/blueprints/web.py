@@ -1,9 +1,4 @@
-"""Page routes.
-
-Every screen renders server-side for the online case and is cached by the
-service worker for the offline case; the client-side store keeps the numbers
-live either way.
-"""
+"""Page routes."""
 from __future__ import annotations
 
 from datetime import date
@@ -25,12 +20,6 @@ bp = Blueprint("web", __name__)
 
 
 def _selected_week(default_to_last_completed: bool = False) -> tuple[date, date]:
-    """The week the screen is showing.
-
-    Most screens track the current week. Reports and invoices bill a week
-    that has closed, so they start on the last completed one unless the user
-    picks another.
-    """
     start_arg = request.args.get("week")
     if start_arg:
         return week_bounds(parse_date(start_arg))
@@ -179,7 +168,7 @@ def invoice_pdf(invoice_id):
     path = Config.EXPORT_DIR / invoice["filename"]
     if not path.exists():
         return "The PDF for this invoice is no longer on disk.", 404
-    return send_file(path, mimetype="application/pdf",
+    return send_file(str(path.resolve()), mimetype="application/pdf",
                      download_name=invoice["filename"],
                      as_attachment=bool(request.args.get("download")))
 
@@ -206,7 +195,7 @@ def settings_page():
 @bp.get("/settings/backup")
 def download_backup():
     path = backup_to(Config.EXPORT_DIR / f"mercury-backup-{date.today().isoformat()}.db")
-    return send_file(path, as_attachment=True, download_name=path.name)
+    return send_file(str(path.resolve()), as_attachment=True, download_name=path.name)
 
 
 @bp.post("/settings/demo-reset")
@@ -222,14 +211,8 @@ def reset_demo():
 
 @bp.get("/offline")
 def offline_page():
-    """Shown by the service worker if a page is requested that was never
-    cached. Every core screen is precached, so this is a rare last resort."""
     return render_template("offline.html")
 
-
-# --------------------------------------------------------------------------
-# PWA plumbing
-# --------------------------------------------------------------------------
 
 @bp.get("/manifest.webmanifest")
 def manifest():
@@ -262,12 +245,6 @@ def manifest():
 
 @bp.get("/sw.js")
 def service_worker():
-    """Served from the root so its scope covers the whole app.
-
-    The cache version is stamped in here rather than hardcoded in the file:
-    an unchanged worker is never re-installed by the browser, so a constant
-    would leave phones serving stale scripts after every deploy.
-    """
     source = (BASE_DIR / "static" / "js" / "sw.js").read_text()
     response = make_response(
         source.replace("__MERCURY_BUILD__", f"v{build_id()}"))

@@ -1,4 +1,5 @@
 """Route smoke tests, week math, and the export/invoice pipeline."""
+import re
 from datetime import date, timedelta
 
 import pytest
@@ -343,3 +344,70 @@ def test_the_ai_probe_runs_once_not_per_page(ctx, monkeypatch):
     for _ in range(5):
         ai.available()
     assert len(calls) == 1
+
+
+def test_service_worker_is_stamped_with_a_real_build_id(client):
+    """A hardcoded placeholder shipping to a phone would break caching."""
+    body = client.get("/sw.js").data.decode()
+    assert "__MERCURY_BUILD__" not in body
+
+    match = re.search(r"const VERSION = '([^']+)'", body)
+    assert match, "no VERSION in the served service worker"
+    assert re.fullmatch(r"v[0-9a-f]{12}", match.group(1)), match.group(1)
+
+
+def test_build_id_changes_when_a_cached_asset_changes(tmp_path):
+    """The whole point: a changed stylesheet must retire the old caches.
+
+    Without this, an installed phone serves stale JavaScript forever — which
+    for this app means stale pay calculations.
+    """
+    from mercury.build import compute_build_id
+
+    (tmp_path / "static" / "css").mkdir(parents=True)
+    (tmp_path / "templates").mkdir()
+    stylesheet = tmp_path / "static" / "css" / "app.css"
+    stylesheet.write_text("body { color: red }")
+    (tmp_path / "templates" / "base.html").write_text("<p>hello</p>")
+
+    before = compute_build_id(tmp_path)
+    assert compute_build_id(tmp_path) == before          # stable when nothing moves
+
+    stylesheet.write_text("body { color: blue }")
+    assert compute_build_id(tmp_path) != before          # and changes when it does
+
+
+def test_build_id_covers_templates_and_new_files(tmp_path):
+    from mercury.build import compute_build_id
+
+    (tmp_path / "static").mkdir()
+    (tmp_path / "templates").mkdir()
+    page = tmp_path / "templates" / "page.html"
+    page.write_text("<p>one</p>")
+    before = compute_build_id(tmp_path)
+
+    page.write_text("<p>two</p>")
+    assert compute_build_id(tmp_path) != before
+
+    after_edit = compute_build_id(tmp_path)
+    (tmp_path / "static" / "extra.js").write_text("//")
+    assert compute_build_id(tmp_path) != after_edit
+
+
+def test_large_vendor_files_are_fingerprinted_by_size_not_read(tmp_path):
+    """Hashing the ~10 MB OCR engine on every boot would cost more than it
+    detects, so oversized files contribute their size instead."""
+    from mercury.build import CONTENT_HASH_LIMIT, compute_build_id
+
+    (tmp_path / "static" / "vendor").mkdir(parents=True)
+    (tmp_path / "templates").mkdir()
+    blob = tmp_path / "static" / "vendor" / "engine.wasm"
+
+    blob.write_bytes(b"a" * (CONTENT_HASH_LIMIT + 10))
+    before = compute_build_id(tmp_path)
+
+    blob.write_bytes(b"b" * (CONTENT_HASH_LIMIT + 10))   # same size, new content
+    assert compute_build_id(tmp_path) == before
+
+    blob.write_bytes(b"c" * (CONTENT_HASH_LIMIT + 99))   # different size
+    assert compute_build_id(tmp_path) != before

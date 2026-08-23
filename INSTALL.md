@@ -108,7 +108,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-You should see `83 passed`. It needs no network and no browser.
+You should see `87 passed`. It needs no network and no browser.
 
 ---
 
@@ -306,16 +306,52 @@ Keep a copy somewhere other than this machine.
 
 ## 9. Updating
 
+Nothing here is compiled, so there is no build step — an update is a pull and
+a restart:
+
 ```bash
 cd ~/mercury-bot
 git pull
-source .venv/bin/activate
-pip install -r requirements.txt
-systemctl --user restart mercury      # if you set up the service
+systemctl --user restart mercury
 ```
 
-Your database is untouched by updates — it lives in `data/`, which git
-ignores.
+Run `pip install -r requirements.txt` as well **only if** the pull changed
+`requirements.txt`; otherwise it is a no-op.
+
+**The restart is not optional.** The app stamps the service worker with a
+hash of your templates, stylesheets and scripts, and computes it once per
+process. Without a restart the server keeps serving the old hash, and every
+phone keeps serving the old cached code.
+
+Your database is untouched — it lives in `data/`, which git ignores. So is
+your `.env`.
+
+**On the phone:** open the app once with signal after updating. The first
+launch installs the new worker; the second serves the new code. If you are
+mid-change and want it immediately, force-close and reopen it twice.
+
+<details>
+<summary>Updating a checkout that is still on the old feature branch</summary>
+
+Early instructions had you on `claude/app-redesign-offline-sync-8ye6tn`. That
+branch is behind `main` now. Move across once:
+
+```bash
+cd ~/mercury-bot
+git status                  # if tracked files are modified, see below
+git fetch origin
+git checkout main
+git pull origin main
+```
+
+If `git status` lists modified tracked files — for example you edited
+`mercury/config.py` to change the Gemini model — discard them, since `main`
+already has those changes:
+
+```bash
+git restore .               # does NOT touch .env or data/, both git-ignored
+```
+</details>
 
 ---
 

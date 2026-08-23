@@ -7,7 +7,10 @@
  *   - writes       -> never cached; the app queues them in IndexedDB instead
  */
 
-const VERSION = 'v2.0.0';
+// Substituted by the /sw.js route with a hash of the cached assets, so a
+// changed stylesheet or script automatically retires the old caches. The
+// literal below is only a fallback if this file is ever served raw.
+const VERSION = '__MERCURY_BUILD__';
 const SHELL = `mercury-shell-${VERSION}`;
 const RUNTIME = `mercury-runtime-${VERSION}`;
 

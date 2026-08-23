@@ -137,6 +137,13 @@ The service worker precaches every screen and serves navigations network-first
 with a cache fallback. The ~10 MB OCR engine is fetched in the background while
 there's signal and cached from then on.
 
+Static assets are served **cache-first**, so the cache name has to change when
+they do — otherwise an installed phone serves stale JavaScript forever, and
+for this app that means stale pay calculations. Rather than rely on remembering
+to bump a constant, `/sw.js` is stamped at request time with a hash of
+`static/` and `templates/` (`mercury/build.py`). Change any asset, restart, and
+every device retires its cache on next launch.
+
 ---
 
 ## Project layout
@@ -156,7 +163,7 @@ static/js/
   hydrate.js      re-renders lists from the local replica
   scanner.js      AI + offline OCR label reading
   sw.js           service worker
-tests/            83 tests, no network required
+tests/            87 tests, no network required
 ```
 
 ### The AI model name is configuration, not code
@@ -197,7 +204,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-83 tests. Covers the tier boundaries in the pay math, the sync contract (replay,
+87 tests. Covers the tier boundaries in the pay math, the sync contract (replay,
 conflicts, tombstones, delta pulls, partial-batch failures), week boundaries,
 invoice assembly, and the export pipeline.
 

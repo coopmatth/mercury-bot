@@ -13,6 +13,7 @@ from flask import (Blueprint, current_app, flash, jsonify, make_response,
 
 from .. import ai, invoicing
 from ..config import BASE_DIR, Config
+from ..build import build_id
 from ..db import backup_to, current_seq
 from ..models import (last_completed_week, list_custom_items, list_jobs,
                       list_scans, parse_date, recent_weeks, week_bounds,
@@ -261,9 +262,15 @@ def manifest():
 
 @bp.get("/sw.js")
 def service_worker():
-    """Served from the root so its scope covers the whole app."""
+    """Served from the root so its scope covers the whole app.
+
+    The cache version is stamped in here rather than hardcoded in the file:
+    an unchanged worker is never re-installed by the browser, so a constant
+    would leave phones serving stale scripts after every deploy.
+    """
+    source = (BASE_DIR / "static" / "js" / "sw.js").read_text()
     response = make_response(
-        send_file(BASE_DIR / "static" / "js" / "sw.js"))
+        source.replace("__MERCURY_BUILD__", f"v{build_id()}"))
     response.headers["Content-Type"] = "application/javascript"
     response.headers["Service-Worker-Allowed"] = "/"
     response.headers["Cache-Control"] = "no-cache"

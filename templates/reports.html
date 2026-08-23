@@ -41,12 +41,12 @@
     </p>
     <div class="section-label mt-0">Contractor sheet — quantities only</div>
     <div class="btn-row mb-2">
-      <a class="btn btn-outline" href="/api/export/contractor?start={{ selected_week }}">Download</a>
+      <a class="btn btn-outline" href="/api/export/contractor?start={{ selected_week }}" target="_blank" download>Download</a>
       <button class="btn btn-primary" data-email="contractor" data-requires-online>Email GC</button>
     </div>
     <div class="section-label mt-0">Pay sheet — with your totals</div>
     <div class="btn-row">
-      <a class="btn btn-outline" href="/api/export/personal?start={{ selected_week }}">Download</a>
+      <a class="btn btn-outline" href="/api/export/personal?start={{ selected_week }}" target="_blank" download>Download</a>
       <button class="btn btn-primary" data-email="personal" data-requires-online>Email me</button>
     </div>
   </div>
@@ -160,7 +160,6 @@
 <script type="module">
   import { toast } from '/static/js/app.js';
 
-  // Repeatable description/qty/rate rows for one-off invoice lines.
   document.querySelectorAll('[data-add-line]').forEach((button) => {
     const host = button.previousElementSibling;
     button.addEventListener('click', () => {

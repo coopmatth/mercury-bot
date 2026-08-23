@@ -1,12 +1,7 @@
-"""JSON API.
-
-This is the surface the offline client talks to. Every write endpoint is
-idempotent on a client-supplied UUID, so the sync queue can retry freely.
-"""
+"""JSON API."""
 from __future__ import annotations
 
 from datetime import date
-
 from flask import Blueprint, jsonify, request, send_file
 
 from .. import ai, invoicing
@@ -17,7 +12,8 @@ from ..exports import build_contractor_workbook, build_personal_workbook
 from ..models import (delete_custom_item, delete_job, delete_scan, list_jobs,
                       list_custom_items, list_scans, parse_date, save_custom_item,
                       save_job, save_scan, week_bounds, week_summary)
-from ..rates import ITEM_LIST, calculate_job_total, rate_table
+from ..rates import (ITEM_LIST, calculate_job_total, rate_table, get_item_list,
+                     save_rate_card_item, delete_rate_card_item)
 from ..sync import devices, sync
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -34,16 +30,11 @@ def _week_from_args() -> tuple[date, date]:
     return week_bounds(parse_date(start_arg) if start_arg else None)
 
 
-# --------------------------------------------------------------------------
-# Reference data — cached by the service worker so the app works cold offline
-# --------------------------------------------------------------------------
-
 @bp.get("/bootstrap")
 def bootstrap():
-    """Everything a freshly installed client needs before it goes offline."""
     start, end = week_bounds()
     return jsonify({
-        "items": ITEM_LIST,
+        "items": get_item_list(),
         "rates": rate_table(),
         "server_seq": current_seq(),
         "week": {"start": start.isoformat(), "end": end.isoformat()},
@@ -56,16 +47,36 @@ def bootstrap():
 
 @bp.post("/quote")
 def quote():
-    """Price a set of quantities without saving. Used for the live total on
-    the job form when the device happens to be online; the client computes
-    the same number locally when it is not."""
     items = (request.json or {}).get("items", {})
     return jsonify({"total": calculate_job_total(items)})
 
 
-# --------------------------------------------------------------------------
-# Sync
-# --------------------------------------------------------------------------
+@bp.get("/rates")
+def api_get_rates():
+    return jsonify({"ok": True, "rates": rate_table()})
+
+
+@bp.post("/rates")
+def api_save_rate():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Charge code name is required."}), 400
+    try:
+        rate = float(data.get("rate", 0))
+    except (ValueError, TypeError):
+        rate = 0.0
+    unit = data.get("unit", "ea")
+    item_id = data.get("id", "")
+    save_rate_card_item(name=name, rate=rate, unit=unit, item_id=item_id)
+    return jsonify({"ok": True, "rates": rate_table()})
+
+
+@bp.delete("/rates/<item_id>")
+def api_delete_rate(item_id):
+    delete_rate_card_item(item_id)
+    return jsonify({"ok": True, "rates": rate_table()})
+
 
 @bp.post("/sync")
 def sync_endpoint():
@@ -77,10 +88,6 @@ def sync_endpoint():
 def sync_status():
     return jsonify({"ok": True, "server_seq": current_seq(), "devices": devices()})
 
-
-# --------------------------------------------------------------------------
-# Jobs
-# --------------------------------------------------------------------------
 
 @bp.get("/jobs")
 def api_list_jobs():
@@ -104,10 +111,6 @@ def api_delete_job(job_id):
                     "server_seq": current_seq()})
 
 
-# --------------------------------------------------------------------------
-# Custom items
-# --------------------------------------------------------------------------
-
 @bp.get("/custom-items")
 def api_list_customs():
     start, end = _week_from_args()
@@ -125,10 +128,6 @@ def api_delete_custom(item_id):
     return jsonify({"ok": delete_custom_item(item_id, device_id=_device()),
                     "server_seq": current_seq()})
 
-
-# --------------------------------------------------------------------------
-# Equipment scans
-# --------------------------------------------------------------------------
 
 @bp.get("/scans")
 def api_list_scans():
@@ -149,10 +148,6 @@ def api_delete_scan(scan_id):
 
 @bp.get("/ai/models")
 def api_ai_models():
-    """What this API key can actually generate with, asked of the API.
-
-    Saves guessing at a model name when Google retires one.
-    """
     try:
         return jsonify({"ok": True, "configured": Config.GEMINI_MODEL,
                         "models": ai.available_models()})
@@ -162,10 +157,33 @@ def api_ai_models():
         return jsonify({"ok": False, "error": f"Could not reach Gemini: {exc}"}), 502
 
 
+@bp.post("/ai/set-model")
+def api_set_model():
+    model_name = (request.json or {}).get("model", "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "No model name provided"}), 400
+
+    Config.GEMINI_MODEL = model_name
+    env_file = Config.DATA_DIR.parent / ".env"
+    if env_file.exists():
+        lines = env_file.read_text().splitlines()
+        found = False
+        new_lines = []
+        for line in lines:
+            if line.startswith("GEMINI_MODEL="):
+                new_lines.append(f"GEMINI_MODEL={model_name}")
+                found = True
+            else:
+                new_lines.append(line)
+        if not found:
+            new_lines.append(f"GEMINI_MODEL={model_name}")
+        env_file.write_text("\n".join(new_lines) + "\n")
+
+    return jsonify({"ok": True, "configured": Config.GEMINI_MODEL})
+
+
 @bp.post("/parse-equipment")
 def api_parse_equipment():
-    """Server-side AI parse. The client only calls this when online; offline
-    it runs OCR in the browser and never touches this route."""
     files = request.files.getlist("images")
     if not files:
         return jsonify({"ok": False, "error": "No images were uploaded."}), 400
@@ -191,10 +209,6 @@ def api_parse_equipment():
         return jsonify({"ok": False, "error": f"AI parse failed: {exc}",
                         "fallback": "offline"}), 502
 
-
-# --------------------------------------------------------------------------
-# Summary, exports, email
-# --------------------------------------------------------------------------
 
 @bp.get("/summary")
 def api_summary():
@@ -281,29 +295,3 @@ def api_email_invoice(invoice_id):
         return jsonify({"ok": True, "demo": True, "message":
                         "Demo mode — not sent. Written to data/demo/outbox."})
     return jsonify({"ok": True, "message": f"Invoice emailed to {Config.CONTRACTOR_EMAIL}."})
-    # (Keep all existing code in api.py, just append this to the very bottom)
-
-@bp.post("/ai/set-model")
-def api_set_model():
-    model_name = (request.json or {}).get("model", "").strip()
-    if not model_name:
-        return jsonify({"ok": False, "error": "No model name provided"}), 400
-
-    Config.GEMINI_MODEL = model_name
-    env_file = Config.DATA_DIR.parent / ".env"
-    if env_file.exists():
-        lines = env_file.read_text().splitlines()
-        found = False
-        new_lines = []
-        for line in lines:
-            if line.startswith("GEMINI_MODEL="):
-                new_lines.append(f"GEMINI_MODEL={model_name}")
-                found = True
-            else:
-                new_lines.append(line)
-        if not found:
-            new_lines.append(f"GEMINI_MODEL={model_name}")
-        env_file.write_text("\n".join(new_lines) + "\n")
-
-    return jsonify({"ok": True, "configured": Config.GEMINI_MODEL})
-

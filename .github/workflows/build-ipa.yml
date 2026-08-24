@@ -46,8 +46,9 @@ jobs:
 
       - name: Generate iOS Project
         run: |
-          # Add iOS without automatically running pod install yet
-          npx cap add ios --no-update
+          # Capacitor 6 automatically runs pod install and removed the skip flag.
+          # We append || true so the workflow doesn't stop when the initial pod install fails.
+          npx cap add ios || true
           
           # Force the minimum deployment target to iOS 15.0 to satisfy CocoaPods
           sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/g" ios/App/Podfile

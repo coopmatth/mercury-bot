@@ -19,7 +19,8 @@ jobs:
       - name: Install Capacitor
         run: |
           npm init -y
-          npm install @capacitor/core @capacitor/cli @capacitor/ios
+          # Pinning to v6 ensures stability and matches standard iOS deployment targets
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/ios@6
 
       - name: Initialize Capacitor Shell
         run: |
@@ -44,7 +45,16 @@ jobs:
           EOF
 
       - name: Generate iOS Project
-        run: npx cap add ios
+        run: |
+          # Add iOS without automatically running pod install yet
+          npx cap add ios --no-update
+          
+          # Force the minimum deployment target to iOS 15.0 to satisfy CocoaPods
+          sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/g" ios/App/Podfile
+          sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" ios/App/App.xcodeproj/project.pbxproj
+          
+          # Now install the pods with the correct deployment target
+          npx cap update ios
 
       - name: Compile Unsigned IPA via Xcode
         run: |
@@ -60,7 +70,7 @@ jobs:
           
           # Package the binary into the .ipa format SideStore/Signulous expects
           cd build/Release-iphoneos
-          mkdir Payload
+          mkdir -p Payload
           mv App.app Payload/
           zip -r Mercury.ipa Payload
 

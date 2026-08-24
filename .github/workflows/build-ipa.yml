@@ -1,0 +1,72 @@
+name: Build iOS IPA (Native Shell)
+
+on:
+  workflow_dispatch: # This allows you to trigger the build manually
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Capacitor
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
+
+      - name: Initialize Capacitor Shell
+        run: |
+          # Create a dummy web directory (required by Capacitor, though we bypass it)
+          mkdir -p www
+          echo "<html><body>Loading...</body></html>" > www/index.html
+          
+          npx cap init Mercury com.mercury.tracker --web-dir www
+          
+          # Inject your Tailscale URL into the Capacitor config
+          cat << EOF > capacitor.config.json
+          {
+            "appId": "com.mercury.tracker",
+            "appName": "Mercury",
+            "webDir": "www",
+            "server": {
+              "url": "https://discord-dnb20-series.tailc835fa.ts.net",
+              "cleartext": true,
+              "allowNavigation": ["discord-dnb20-series.tailc835fa.ts.net"]
+            }
+          }
+          EOF
+
+      - name: Generate iOS Project
+        run: npx cap add ios
+
+      - name: Compile Unsigned IPA via Xcode
+        run: |
+          cd ios/App
+          # Build the raw binary without Apple code signing constraints
+          xcodebuild -workspace App.xcworkspace \
+                     -scheme App \
+                     -configuration Release \
+                     clean build \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO
+          
+          # Package the binary into the .ipa format SideStore/Signulous expects
+          cd build/Release-iphoneos
+          mkdir Payload
+          mv App.app Payload/
+          zip -r Mercury.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mercury-iOS-App
+          path: ios/App/build/Release-iphoneos/Mercury.ipa
+          retention-days: 7

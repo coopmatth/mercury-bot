@@ -61,13 +61,15 @@ jobs:
         run: |
           cd ios/App
           # Build the raw binary without Apple code signing constraints
+          # Force output to local build folder instead of hidden DerivedData
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -configuration Release \
                      clean build \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO
+                     CODE_SIGNING_ALLOWED=NO \
+                     CONFIGURATION_BUILD_DIR=$PWD/build/Release-iphoneos
           
           # Package the binary into the .ipa format SideStore/Signulous expects
           cd build/Release-iphoneos

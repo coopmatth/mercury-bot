@@ -347,9 +347,8 @@ async function renderHistory() {
 renderHistory();
 document.addEventListener('mercury:synced', renderHistory);
 
-if ('requestIdleCallback' in window) {
-  requestIdleCallback(() => {
-    ['worker.min.js', 'eng.traineddata.gz', 'tesseract-core-simd-lstm.wasm.js']
-      .forEach((name) => fetch(`/static/vendor/tesseract/${name}`).catch(() => {}));
-  }, { timeout: 8000 });
-}
+// The OCR engine itself is precached by the service worker's install step
+// (static/js/sw.js), not warmed opportunistically from here — that used to
+// be page-scoped and only ran if this exact page was visited online long
+// enough for a ~9.7 MB fetch to finish, which meant offline scanning could
+// fail on a device that had simply never had the chance.

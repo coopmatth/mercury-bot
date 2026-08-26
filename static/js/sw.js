@@ -21,7 +21,22 @@ const PRECACHE = [
   '/static/js/job-form.js',
   '/static/js/scanner.js',
   '/static/js/photos.js',
+  // The on-device OCR engine. ~9.7 MB combined, and deliberately precached
+  // here rather than fetched opportunistically from a page: a page-scoped
+  // fetch only ever gets a chance to run if the technician happens to visit
+  // /scanner while online and stays long enough for it to finish, and is
+  // aborted with nothing cached if they navigate away first. Since offline
+  // scanning is the one feature that has to work with zero signal, it can't
+  // depend on that happening — it has to be guaranteed present the moment
+  // the service worker finishes installing, whichever page was opened
+  // first. Both wasm variants are included since Tesseract.js picks
+  // whichever one the device's SIMD support calls for at runtime, and only
+  // caching one would leave devices that need the other with nothing.
   '/static/vendor/tesseract/tesseract.min.js',
+  '/static/vendor/tesseract/worker.min.js',
+  '/static/vendor/tesseract/tesseract-core-lstm.wasm.js',
+  '/static/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
+  '/static/vendor/tesseract/eng.traineddata.gz',
   '/static/icons/logo.png',
   '/manifest.webmanifest',
   '/api/bootstrap',

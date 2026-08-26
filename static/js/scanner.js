@@ -90,19 +90,33 @@ async function preprocess(file) {
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
 
-  // Grayscale only — no hard black/white threshold. A fixed cutoff at 92%
-  // of the frame's mean luminance held up on flat, evenly-lit labels but
-  // corrupted characters under a shadow or glare gradient (confirmed
-  // against a real GigaSpire label: it flipped a MAC's digits into
-  // characters outside 0-9A-F, which silently dropped the whole match
-  // rather than just losing a little accuracy). Grayscale gave Tesseract's
-  // own thresholding more to work with and read that label correctly,
-  // with identical output to the old code on a label that already worked.
+  // Grayscale + linear contrast stretch — no hard black/white threshold. A
+  // fixed cutoff at 92% of the frame's mean luminance held up on flat,
+  // evenly-lit labels but corrupted characters under a shadow or glare
+  // gradient (confirmed against a real GigaSpire label: it flipped a MAC's
+  // digits into characters outside 0-9A-F, which silently dropped the whole
+  // match rather than just losing a little accuracy). Plain grayscale fixed
+  // that but left low-contrast text under-defined enough that Tesseract
+  // dropped a character out of an adjacent field on the same label.
+  // Stretching the frame's actual min-max luminance range to fill 0-255
+  // gave Tesseract sharper edges to work with without ever forcing a
+  // pixel fully black or white, and read every field on both labels
+  // correctly — identical output to the old code on the label that already
+  // worked.
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const px = image.data;
-  for (let i = 0; i < px.length; i += 4) {
+  const lums = new Float32Array(px.length / 4);
+  let min = 255, max = 0;
+  for (let i = 0, j = 0; i < px.length; i += 4, j += 1) {
     const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    px[i] = px[i + 1] = px[i + 2] = lum;
+    lums[j] = lum;
+    if (lum < min) min = lum;
+    if (lum > max) max = lum;
+  }
+  const range = Math.max(1, max - min);
+  for (let i = 0, j = 0; i < px.length; i += 4, j += 1) {
+    const value = Math.max(0, Math.min(255, ((lums[j] - min) / range) * 255));
+    px[i] = px[i + 1] = px[i + 2] = value;
   }
   ctx.putImageData(image, 0, 0);
   return canvas;

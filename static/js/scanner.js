@@ -109,6 +109,32 @@ async function preprocess(file) {
   return canvas;
 }
 
+/* MACs print in more than one format. Calix ONT labels commonly run all 12
+ * hex characters together with nothing between them; gateway labels —
+ * GigaSpire included — very commonly separate each pair with a colon or
+ * hyphen, sometimes group them in dot-separated quads. Only matching the
+ * unbroken form meant a label printed either other way produced nothing at
+ * all, even with perfect OCR: this is why the ONT "filled in quick" while
+ * the router came back empty. Each pattern is normalized to a clean,
+ * unbroken 12-character string on its own matched text — never by
+ * stripping separators across the whole OCR dump, which risks gluing
+ * digits from unrelated lines into a false match. */
+const MAC_PATTERNS = [
+  /\b[0-9A-F]{12}\b/g,                                   // 441B86A2D004
+  /\b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\b/g,               // 44:1B:86:A2:D0:04
+  /\b(?:[0-9A-F]{4}[.:-]){2}[0-9A-F]{4}\b/g,              // 441B.86A2.D004
+];
+
+function extractMacs(text) {
+  const found = new Set();
+  for (const pattern of MAC_PATTERNS) {
+    for (const match of text.match(pattern) || []) {
+      found.add(match.replace(/[:.\-]/g, ''));
+    }
+  }
+  return found;
+}
+
 function extractFields(rawText) {
   const upper = rawText.toUpperCase();
   const isOnt = /\bONT\b|PON|1101|803/.test(upper);
@@ -117,8 +143,7 @@ function extractFields(rawText) {
   const clean = upper.replace(/[OQ]/g, '0').replace(/I/g, '1');
   const fsans = [...new Set(clean.match(/CXNK[0-9A-F]{8}/g) || [])];
   const serials = [...new Set(clean.match(/\b\d{12,15}\b/g) || [])];
-  const macs = [...new Set((clean.match(/\b[0-9A-F]{12}\b/g) || [])
-    .filter((m) => !serials.includes(m)))];
+  const macs = [...extractMacs(clean)].filter((m) => !serials.includes(m));
 
   return { isOnt, isRouter, fsans, serials, macs };
 }
@@ -142,10 +167,15 @@ function assemble(findings) {
   unknown.fsans = uniq(unknown.fsans); unknown.macs = uniq(unknown.macs);
   unknown.serials = uniq(unknown.serials);
 
-  if (!ont.fsans.length && unknown.fsans.length) ont.fsans.push(unknown.fsans.shift());
+  // Router's empty slot claims a leftover before the ONT's *optional*
+  // second slot (the MTA MAC) does. A photo that couldn't be classified by
+  // keyword still has its MAC/FSAN land here, and if the ONT already has
+  // its primary MAC, leaving the router with nothing is a worse failure
+  // than the ONT missing its nice-to-have second value.
   if (!router.fsans.length && unknown.fsans.length) router.fsans.push(unknown.fsans.shift());
-  while (ont.macs.length < 2 && unknown.macs.length) ont.macs.push(unknown.macs.shift());
+  if (!ont.fsans.length && unknown.fsans.length) ont.fsans.push(unknown.fsans.shift());
   if (!router.macs.length && unknown.macs.length) router.macs.push(unknown.macs.shift());
+  while (ont.macs.length < 2 && unknown.macs.length) ont.macs.push(unknown.macs.shift());
 
   return TEMPLATE({
     ontMac: ont.macs[0] || '',

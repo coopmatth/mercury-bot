@@ -1,0 +1,85 @@
+name: Build iOS IPA (Native Shell)
+
+on:
+  workflow_dispatch: # This allows you to trigger the build manually
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Capacitor
+        run: |
+          npm init -y
+          # Pinning to v6 ensures stability and matches standard iOS deployment targets
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/ios@6
+
+      - name: Initialize Capacitor Shell
+        run: |
+          # Create a dummy web directory (required by Capacitor, though we bypass it)
+          mkdir -p www
+          echo "<html><body>Loading...</body></html>" > www/index.html
+          
+          npx cap init Mercury com.mercury.tracker --web-dir www
+          
+          # Inject your Tailscale URL into the Capacitor config
+          cat << EOF > capacitor.config.json
+          {
+            "appId": "com.mercury.tracker",
+            "appName": "Mercury",
+            "webDir": "www",
+            "server": {
+              "url": "https://discord-dnb20-series.tailc835fa.ts.net",
+              "cleartext": true,
+              "allowNavigation": ["discord-dnb20-series.tailc835fa.ts.net"]
+            }
+          }
+          EOF
+
+      - name: Generate iOS Project
+        run: |
+          # Capacitor 6 automatically runs pod install and removed the skip flag.
+          # We append || true so the workflow doesn't stop when the initial pod install fails.
+          npx cap add ios || true
+          
+          # Force the minimum deployment target to iOS 15.0 to satisfy CocoaPods
+          sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/g" ios/App/Podfile
+          sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" ios/App/App.xcodeproj/project.pbxproj
+          
+          # Now install the pods with the correct deployment target
+          npx cap update ios
+
+      - name: Compile Unsigned IPA via Xcode
+        run: |
+          cd ios/App
+          # Build the raw binary without Apple code signing constraints
+          # Force output to local build folder instead of hidden DerivedData
+          xcodebuild -workspace App.xcworkspace \
+                     -scheme App \
+                     -configuration Release \
+                     clean build \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CONFIGURATION_BUILD_DIR=$PWD/build/Release-iphoneos
+          
+          # Package the binary into the .ipa format SideStore/Signulous expects
+          cd build/Release-iphoneos
+          mkdir -p Payload
+          mv App.app Payload/
+          zip -r Mercury.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mercury-iOS-App
+          path: ios/App/build/Release-iphoneos/Mercury.ipa
+          retention-days: 7

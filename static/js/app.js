@@ -129,7 +129,7 @@ export function aerialPrice(feet) {
   if (ft <= 0) return 0;
   if (ft <= 300) return 75.0;
   if (ft <= 600) return 150.0;
-  return Math.round((150.0 + (ft - 601) * 0.5) * 100) / 100;
+  return Math.round((150.0 + (ft - 600) * 0.5) * 100) / 100;
 }
 
 export function itemPrice(name, qty) {

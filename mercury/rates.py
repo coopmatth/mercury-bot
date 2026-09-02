@@ -90,7 +90,7 @@ def aerial_drop_price(feet: float) -> float:
         return AERIAL_TIER_1_PRICE
     if feet <= AERIAL_TIER_2_MAX:
         return AERIAL_TIER_2_PRICE
-    return round(AERIAL_TIER_2_PRICE + (feet - AERIAL_TIER_3_MIN) * AERIAL_OVERAGE_RATE, 2)
+    return round(AERIAL_TIER_2_PRICE + (feet - AERIAL_TIER_2_MAX) * AERIAL_OVERAGE_RATE, 2)
 
 
 def aerial_tier(feet: float) -> str:

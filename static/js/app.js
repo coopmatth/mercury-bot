@@ -337,13 +337,3 @@ document.addEventListener('click', async (event) => {
 
 // Force a clean reload if you use the physical back-swipe gesture
 window.addEventListener('popstate', () => window.location.reload());
-main.container {
-  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
-  opacity: 1;
-  transform: translateY(0);
-}
-
-main.container.nav-fade {
-  opacity: 0;
-  transform: translateY(6px);
-}

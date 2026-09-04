@@ -337,3 +337,37 @@ document.addEventListener('click', async (event) => {
 });
 
 window.addEventListener('popstate', () => window.location.reload());
+/* ------------------------------------------- native iOS photo download bypass */
+document.addEventListener('click', async (event) => {
+  // Find if the clicked element is a download link
+  const downloadLink = event.target.closest('a[download]');
+  if (!downloadLink) return;
+
+  // Check if the device supports the native share menu (like iOS)
+  if (navigator.share) {
+    event.preventDefault(); // Stop the default webview download block
+    
+    try {
+      // Fetch the image data from the link
+      const response = await fetch(downloadLink.href);
+      const blob = await response.blob();
+      
+      // Create a file object for the Share Sheet
+      const filename = downloadLink.download || 'compressed_image.jpg';
+      const file = new File([blob], filename, { type: blob.type });
+
+      // Verify the system can share this file type
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Save Photo'
+        });
+      } else {
+        // Fallback if file sharing is unsupported
+        window.location.href = downloadLink.href;
+      }
+    } catch (err) {
+      console.error("Failed to open share sheet:", err);
+    }
+  }
+});

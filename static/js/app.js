@@ -278,3 +278,58 @@ window.mercury = {
 };
 
 init();
+
+/* ------------------------------------------------- seamless navigation router */
+document.addEventListener('click', async (event) => {
+  // Only intercept clicks on the bottom tab bar and the top-left logo
+  const link = event.target.closest('.tabbar a, .brand');
+  if (!link || !link.href) return;
+
+  event.preventDefault();
+  const url = link.href;
+
+  // Instantly highlight the tapped tab so it feels snappy
+  if (link.classList.contains('tab')) {
+    document.querySelectorAll('.tabbar .tab').forEach(t => t.classList.remove('active'));
+    link.classList.add('active');
+  }
+
+  try {
+    // Fetch the next page in the background (works perfectly offline via Service Worker)
+    const res = await fetch(url);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    // Swap the old page content with the new page content
+    const currentMain = document.querySelector('main.container');
+    const newMain = doc.querySelector('main.container');
+    if (currentMain && newMain) {
+      currentMain.innerHTML = newMain.innerHTML;
+    }
+
+    // Re-execute any page-specific scripts (like the OCR scanner logic)
+    doc.querySelectorAll('body script').forEach(script => {
+      // Ignore the main app shells since they are already running
+      if (script.src && (script.src.includes('app.js') || script.src.includes('hydrate.js'))) return;
+      
+      const newScript = document.createElement('script');
+      if (script.src) newScript.src = script.src;
+      if (script.type) newScript.type = script.type;
+      newScript.textContent = script.textContent;
+      document.body.appendChild(newScript);
+    });
+
+    // Update the browser's URL and title history
+    document.title = doc.title;
+    window.history.pushState({}, '', url);
+    window.scrollTo(0, 0);
+
+  } catch (err) {
+    // If anything fails, fall back to a standard hard navigation
+    window.location.href = url;
+  }
+});
+
+// Force a clean reload if you use the physical back-swipe gesture
+window.addEventListener('popstate', () => window.location.reload());
+

@@ -506,3 +506,13 @@ body.is-offline [data-requires-online] { opacity: .45; pointer-events: none; }
 html, body {
   background-color: #0B1120 !important;
 }
+main.container {
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+main.container.nav-fade {
+  opacity: 0;
+  transform: translateY(6px);
+}

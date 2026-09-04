@@ -281,11 +281,9 @@ init();
 
 /* ------------------------------------------------- seamless navigation router */
 document.addEventListener('click', async (event) => {
-  // Intercept ANY link clicked in the app
   const link = event.target.closest('a');
   if (!link || !link.href) return;
 
-  // Let external links, email buttons, or downloads act normally
   const url = new URL(link.href);
   if (url.origin !== window.location.origin) return;
   if (link.hasAttribute('download') || link.getAttribute('target') === '_blank') return;
@@ -294,46 +292,48 @@ document.addEventListener('click', async (event) => {
   event.preventDefault();
   const targetUrl = link.href;
 
-  // Instantly highlight the tapped tab (if it happens to be a bottom tab)
   if (link.classList.contains('tab')) {
     document.querySelectorAll('.tabbar .tab').forEach(t => t.classList.remove('active'));
     link.classList.add('active');
   }
 
   try {
-    // Fetch the next page in the background
     const res = await fetch(targetUrl);
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    // Swap the old page content with the new page content
     const currentMain = document.querySelector('main.container');
     const newMain = doc.querySelector('main.container');
+
     if (currentMain && newMain) {
-      currentMain.innerHTML = newMain.innerHTML;
-    }
-
-    // Re-execute any page-specific scripts
-    doc.querySelectorAll('body script').forEach(script => {
-      if (script.src && (script.src.includes('app.js') || script.src.includes('hydrate.js'))) return;
+      // 1. Trigger the CSS fade-out animation
+      currentMain.classList.add('nav-fade');
       
-      const newScript = document.createElement('script');
-      if (script.src) newScript.src = script.src;
-      if (script.type) newScript.type = script.type;
-      newScript.textContent = script.textContent;
-      document.body.appendChild(newScript);
-    });
+      // 2. Wait exactly 150ms for the transition to finish
+      await new Promise(resolve => setTimeout(resolve, 150));
 
-    // Update the browser's URL and title history
-    document.title = doc.title;
-    window.history.pushState({}, '', targetUrl);
-    window.scrollTo(0, 0);
+      // 3. Swap the HTML while the screen is faded out
+      currentMain.innerHTML = newMain.innerHTML;
+      
+      doc.querySelectorAll('body script').forEach(script => {
+        if (script.src && (script.src.includes('app.js') || script.src.includes('hydrate.js'))) return;
+        const newScript = document.createElement('script');
+        if (script.src) newScript.src = script.src;
+        if (script.type) newScript.type = script.type;
+        newScript.textContent = script.textContent;
+        document.body.appendChild(newScript);
+      });
 
+      document.title = doc.title;
+      window.history.pushState({}, '', targetUrl);
+      window.scrollTo(0, 0);
+
+      // 4. Fade the new content back in
+      currentMain.classList.remove('nav-fade');
+    }
   } catch (err) {
-    // If anything fails, fall back to a standard hard navigation
     window.location.href = targetUrl;
   }
 });
 
-// Force a clean reload if you use the physical back-swipe gesture
 window.addEventListener('popstate', () => window.location.reload());

@@ -25,7 +25,7 @@ def start_daily_dispatch_scheduler(app):
     def dispatch_worker():
         while True:
             try:
-                if datetime.now().hour == 20:
+                if datetime.now().hour == 18:18
                     with app.app_context():
                         send_daily_dispatch_report()
             except Exception as exc:

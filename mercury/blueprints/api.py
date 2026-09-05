@@ -334,6 +334,22 @@ def api_set_emails():
 
     return jsonify({"ok": True})
 
+@bp.post("/dispatch/send-now")
+def api_dispatch_now():
+    """Generate today's needs-buried / needs-bore list on demand.
+
+    Marks the jobs it reports as dispatched, so the 8pm scheduled send skips
+    them — anything logged later today still goes out at 8pm as usual.
+    """
+    from .. import send_daily_dispatch_report
+
+    result = send_daily_dispatch_report()
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error")
+                        or "Could not send the dispatch report."}), 400
+    return jsonify(result)
+
+
 @bp.delete("/invoice/<invoice_id>")
 def api_delete_invoice(invoice_id):
     success = invoicing.delete_invoice(invoice_id)

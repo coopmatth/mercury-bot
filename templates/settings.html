@@ -155,6 +155,21 @@
 {% endif %}
 
 <div class="card">
+  <div class="card-head"><span>Daily drop report</span></div>
+  <div class="card-body">
+    <p class="text-sm text-dim mt-0">
+      Today's needs-buried and needs-bore addresses go out by email at 8:00 PM.
+      Send it now instead if you want the list early — the 8:00 PM email will
+      then skip those jobs. Anything you log after this still goes out at 8:00 PM.
+    </p>
+    <button class="btn btn-outline btn-block" id="dispatch-now" data-requires-online>
+      Generate &amp; send today's list
+    </button>
+    <div id="dispatch-result" class="hidden mt-2"></div>
+  </div>
+</div>
+
+<div class="card">
   <div class="card-head"><span>Backup</span></div>
   <div class="card-body">
     <p class="text-sm text-dim mt-0">
@@ -300,6 +315,39 @@
     } finally {
       button.disabled = false;
       button.textContent = 'Check available models';
+    }
+  });
+
+  document.getElementById('dispatch-now')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const host = document.getElementById('dispatch-result');
+    button.disabled = true;
+    button.textContent = 'Sending…';
+    try {
+      const res = await fetch('/api/dispatch/send-now', { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) {
+        toast(data.error || 'Could not send the report.', 'danger', 8000);
+      } else if (!data.sent) {
+        toast('Nothing to report — no jobs today need buried or bore.', 'warning');
+        host.classList.add('hidden');
+      } else {
+        // Show the addresses too, so the list is usable right here without
+        // waiting on the email to land.
+        const section = (title, lines) => lines.length
+          ? `<div class="text-sm mb-1"><strong>${title}</strong></div>` +
+            lines.map(l => `<div class="text-sm text-dim">${l}</div>`).join('') + '<br>'
+          : '';
+        host.innerHTML = section('Needs buried', data.buried) +
+                         section('Needs bore', data.bore);
+        host.classList.remove('hidden');
+        toast(`Sent ${data.count} ${data.count === 1 ? 'address' : 'addresses'} to ${data.recipient}.`, 'success');
+      }
+    } catch (error) {
+      toast(`Could not send: ${error.message}`, 'danger');
+    } finally {
+      button.disabled = false;
+      button.textContent = "Generate & send today's list";
     }
   });
 

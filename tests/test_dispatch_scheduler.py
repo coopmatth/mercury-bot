@@ -44,8 +44,10 @@ def test_dispatch_report_sends_once_for_flagged_jobs(ctx):
 
 
 def test_dispatch_report_is_a_noop_with_nothing_flagged(ctx):
+    """Nothing flagged means no email — and, since the day is no longer
+    marked as handled, a job flagged later the same evening is still picked
+    up rather than being held until tomorrow."""
     from mercury import send_daily_dispatch_report
-    from mercury.db import get_db
 
     save_job({
         "work_date": date.today().isoformat(), "address": "No flags here",
@@ -54,19 +56,24 @@ def test_dispatch_report_is_a_noop_with_nothing_flagged(ctx):
 
     with patch("mercury.email_service.send_email") as mock_send:
         send_daily_dispatch_report()
-
     assert mock_send.call_count == 0
-    # Still records the day as handled, so the hourly poll stops re-querying.
-    row = get_db().execute(
-        "SELECT value FROM meta WHERE key = 'last_dispatch_date'").fetchone()
-    assert row and row["value"] == date.today().isoformat()
+
+    save_job({
+        "work_date": date.today().isoformat(), "address": "Flagged at 8:15pm",
+        "items": {"Installation": 1}, "needs_bore": 1,
+    })
+
+    with patch("mercury.email_service.send_email") as later_send:
+        send_daily_dispatch_report()
+    assert later_send.call_count == 1
+    assert "Flagged at 8:15pm" in later_send.call_args.args[2]
 
 
 def test_a_failed_send_is_retried_not_marked_done(ctx):
     from mercury import send_daily_dispatch_report
     from mercury.db import get_db
 
-    save_job({
+    job = save_job({
         "work_date": date.today().isoformat(), "address": "Retry me",
         "items": {"Installation": 1}, "needs_bore": 1,
     })
@@ -75,8 +82,8 @@ def test_a_failed_send_is_retried_not_marked_done(ctx):
         send_daily_dispatch_report()
 
     row = get_db().execute(
-        "SELECT value FROM meta WHERE key = 'last_dispatch_date'").fetchone()
-    assert row is None, "a failed send must not be marked as delivered"
+        "SELECT dispatched_at FROM jobs WHERE id = ?", (job["id"],)).fetchone()
+    assert row["dispatched_at"] is None, "a failed send must not be marked as delivered"
 
     with patch("mercury.email_service.send_email") as mock_send:
         send_daily_dispatch_report()

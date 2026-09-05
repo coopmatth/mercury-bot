@@ -25,7 +25,7 @@ def start_daily_dispatch_scheduler(app):
     def dispatch_worker():
         while True:
             try:
-                if datetime.now().hour == 18:18
+                if datetime.now().hour == 20:
                     with app.app_context():
                         send_daily_dispatch_report()
             except Exception as exc:
@@ -36,32 +36,40 @@ def start_daily_dispatch_scheduler(app):
     t.start()
 
 
-def send_daily_dispatch_report():
-    from .db import get_db
+def send_daily_dispatch_report() -> dict:
+    """Email any of today's needs-buried / needs-bore addresses that haven't
+    been reported yet.
+
+    De-duped per job (jobs.dispatched_at), not per day. That is what lets the
+    Settings button stand in for the 8pm email: generating the list at 2pm
+    marks those jobs reported, so the scheduled send skips them — while a job
+    logged at 4pm is still picked up at 8pm rather than being dropped.
+
+    Because the dedupe is per job, the manual button and the scheduled send
+    are the same operation; only the trigger differs. This deliberately
+    replaces an earlier per-day 'last_dispatch_date' marker, which could
+    silently swallow a whole evening's work: once the 8pm poll had recorded
+    the day as handled — which it did even on a day with nothing to report —
+    every job logged afterwards was skipped until the next morning.
+
+    Returns a summary of what happened; the scheduler ignores it, the API
+    route reports it back to the page.
+    """
+    from .db import get_db, utcnow
     from .email_service import send_email
     today_str = datetime.now().strftime("%Y-%m-%d")
     conn = get_db()
 
-    # Persisted de-dupe: safe to call this every minute during the 8pm hour,
-    # and safe across a restart that happens to land right after a send —
-    # neither can produce a second email for the same day.
-    sent = conn.execute(
-        "SELECT value FROM meta WHERE key = 'last_dispatch_date'").fetchone()
-    if sent and sent["value"] == today_str:
-        return
-
     jobs = conn.execute(
-        "SELECT address, order_number, needs_buried, needs_bore, notes FROM jobs WHERE work_date = ? AND deleted = 0 AND (needs_buried = 1 OR needs_bore = 1)",
+        "SELECT id, address, order_number, needs_buried, needs_bore, notes "
+        "FROM jobs WHERE work_date = ? AND deleted = 0 "
+        "AND (needs_buried = 1 OR needs_bore = 1) AND dispatched_at IS NULL",
         (today_str,)
     ).fetchall()
 
     if not jobs:
-        # Nothing to report today, either — no need to keep checking on
-        # every poll for the rest of the hour.
-        conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES "
-                     "('last_dispatch_date', ?)", (today_str,))
-        conn.commit()
-        return
+        return {"ok": True, "sent": False, "reason": "nothing-to-report",
+                "buried": [], "bore": [], "count": 0}
 
     buried_list = [f"• {j['address']} (Order #{j['order_number']})" for j in jobs if j['needs_buried']]
     bore_list = [f"• {j['address']} (Order #{j['order_number']})" for j in jobs if j['needs_bore']]
@@ -77,11 +85,20 @@ def send_daily_dispatch_report():
         send_email(Config.YOUR_EMAIL, subject, body)
     except Exception as e:
         print(f"Failed to send dispatch report: {e}")
-        return  # leave last_dispatch_date unset so the next poll retries
+        # Mark nothing: leave the jobs undispatched so the next run retries.
+        return {"ok": False, "sent": False, "error": str(e)}
 
-    conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES "
-                 "('last_dispatch_date', ?)", (today_str,))
+    # Only now that the mail is away are these jobs accounted for.
+    conn.execute(
+        "UPDATE jobs SET dispatched_at = ? WHERE id IN "
+        f"({','.join('?' for _ in jobs)})",
+        [utcnow()] + [j["id"] for j in jobs],
+    )
     conn.commit()
+
+    return {"ok": True, "sent": True, "count": len(jobs),
+            "buried": buried_list, "bore": bore_list,
+            "recipient": Config.YOUR_EMAIL}
 
 def create_app(config: type[Config] = Config) -> Flask:
     app = Flask(

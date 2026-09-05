@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS jobs (
     total        REAL NOT NULL DEFAULT 0,
     needs_buried INTEGER NOT NULL DEFAULT 0,
     needs_bore   INTEGER NOT NULL DEFAULT 0,
+    -- When this job was included in a dispatch report (manual or the 8pm
+    -- send). NULL means it still needs reporting. Server-side bookkeeping
+    -- only: deliberately absent from SYNC_TABLES and from save_job()'s
+    -- upsert, so a phone re-pushing an edited job can never clear it and
+    -- cause the same address to be dispatched twice.
+    dispatched_at TEXT,
     status       TEXT NOT NULL DEFAULT 'complete',
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
@@ -167,6 +173,12 @@ def init_db() -> None:
     if "needs_buried" not in columns:
         conn.execute("ALTER TABLE jobs ADD COLUMN needs_buried INTEGER NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE jobs ADD COLUMN needs_bore INTEGER NOT NULL DEFAULT 0")
+
+    # Existing databases predate per-job dispatch tracking. Adding it NULL
+    # means every job already on disk reads as "not yet dispatched", which
+    # is the safe direction: at worst an address gets reported once more.
+    if "dispatched_at" not in columns:
+        conn.execute("ALTER TABLE jobs ADD COLUMN dispatched_at TEXT")
 
     # Seed the rate card once. Without this the `rates` table exists but is
     # empty, so every lookup falls through to rates.py's hardcoded list and

@@ -38,22 +38,20 @@ if (btnAi && btnLocal) {
     }
   });
 
-  // Offline in a browser there is no reader at all, so don't leave the AI
-  // engine looking like it is standing by.
-  if (!isNativeApp() && !navigator.onLine) {
-    updateToggleUI(false);
-  }
+  // Vision is the default wherever it exists: it returns in about a second,
+  // works with no signal, and reads these labels at least as well as the AI
+  // round trip — which can take 30-45 seconds on a weak connection. In a
+  // browser there is no Vision to select, so the AI engine leads there.
+  updateToggleUI(isNativeApp());
 }
 
 function formatOcrToTemplate(texts) {
   let ont = { mac: '', mta: '', fsan: '', sn: '' };
   let router = { fsan: '', mac: '' };
-  let debugLog = "\n\n=== RAW OCR DEBUG LOG ===\n";
 
   const fix = (s) => s ? s.replace(/O/g, '0').replace(/I/g, '1').replace(/S/g, '5') : '';
 
-  texts.forEach((rawText, index) => {
-    debugLog += `\n[PHOTO ${index + 1}]\n${rawText}\n`;
+  texts.forEach((rawText) => {
     const t = rawText.toUpperCase().replace(/\s+/g, ' ');
 
     const extract = (regex) => {
@@ -94,7 +92,7 @@ Actual Speeds =
 Uploaded Pictures (Yes/No) = 
 Rough NID Location =`;
 
-  return template + debugLog;
+  return template;
 }
 
 const scannerForm = document.getElementById('scanner-form');
@@ -128,7 +126,7 @@ if (scannerForm) {
         const data = await res.json();
         
         // Append a blank debug block if using AI to maintain structure
-        finalPayload = (data.text || formatOcrToTemplate([])) + "\n\n=== RAW OCR DEBUG LOG ===\n[AI ENGINE USED - NO RAW LOGS]";
+        finalPayload = data.text || formatOcrToTemplate([]);
       }
       
       const saved = await window.mercury.saveScan({
@@ -183,8 +181,7 @@ document.addEventListener('click', async (e) => {
     window.mercury.toast('Scan deleted.', 'success');
   }
   if (e.target.classList.contains('copy-btn')) {
-    // Strip the debug log before copying to clipboard
-    const text = decodeURIComponent(e.target.dataset.text).split('=== RAW OCR DEBUG LOG ===')[0].trim();
+    const text = decodeURIComponent(e.target.dataset.text).trim();
     navigator.clipboard.writeText(text);
     window.mercury.toast('Copied to clipboard!', 'success');
   }

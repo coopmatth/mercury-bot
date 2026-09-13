@@ -140,6 +140,65 @@ FSAN: CXNK01D23AAC`],
             ontSn: '542506033321', routerMac: '', routerFsan: '' },
   },
   {
+    /* The real field failure, 2026-09-13. Vision returns this gateway as a
+     * caption column followed by a value column — the two are at opposite
+     * edges of the label — so "MAC:" is never followed by its number. The
+     * result on the phone was ONT correct, router FSAN correct, router MAC
+     * blank. Extraction must not depend on a caption sitting next to its
+     * value. */
+    name: 'GP1101X + GS7 returned as separate caption/value columns',
+    texts: [`Part No.: 100-05857
+REV: 11
+PROD DESC:
+GP1101X XGS-PON ONT
+Serial NO.: 542510142472
+SW VERSION: 24.2.0.0.40
+FSAN: CXNK01DCF604
+ONU MAC: 5CDB3643548F
+MTA MAC: 5CDB36435490`, `GS7 10GE Tri Gateway
+Model: GS7 10GE GS5239E
+Part No.:
+300-Level No.:
+Serial No.:
+MAC:
+MTA MAC:
+FSAN/SSID:
+WPA KEY:
+IP Address:
+User:
+Password:
+100-05969 11
+300-03046 12
+662510187977
+1074C5BD26D7
+1074C5BD26D8
+CXNK01D23AAC
+215869788ef776c4
+192.168.1.1
+admin
+78c40053`],
+    want: { ontMac: '5CDB3643548F', ontMta: '5CDB36435490', ontFsan: 'CXNK01DCF604',
+            ontSn: '542510142472', routerMac: '1074C5BD26D7', routerFsan: 'CXNK01D23AAC' },
+  },
+  {
+    // Same column split on the ONT side: captions, then values.
+    name: 'GP1101X returned as separate caption/value columns',
+    texts: [`PROD DESC:
+GP1101X XGS-PON ONT
+Part No.:
+Serial NO.:
+FSAN:
+ONU MAC:
+MTA MAC:
+100-05857
+542510142472
+CXNK01DCF604
+5CDB3643548F
+5CDB36435490`],
+    want: { ontMac: '5CDB3643548F', ontMta: '5CDB36435490', ontFsan: 'CXNK01DCF604',
+            ontSn: '542510142472', routerMac: '', routerFsan: '' },
+  },
+  {
     // All three, one job.
     name: 'ONT + u6.3 + GS7 (u6.3 first)',
     texts: [ONT, ROUTER_U6, ROUTER_GS7],

@@ -112,13 +112,32 @@ function formatOcrToTemplate(texts) {
     const fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
     const fsan = fsanMatch ? 'CXNK' + fix(fsanMatch[1].substring(4)) : '';
 
+    /* MACs, found without relying on the caption sitting next to the value.
+     *
+     * Vision returns text as observations, and on a label whose captions are
+     * far from their values — the GS7 gateway, where the two are at opposite
+     * edges — the entire caption column can arrive before the entire value
+     * column. "MAC:" is then not followed by its number at all, so anchoring
+     * on the caption finds nothing. That is exactly why a GS7's MAC came back
+     * blank while its FSAN, which is matched anywhere in the text, came
+     * through fine.
+     *
+     * A MAC is the only 12-character hex token these labels carry: the serial
+     * number is all digits, the FSAN's CXNK prefix is not hex, and the WPA key
+     * is 16 characters. On every Calix label seen so far the MTA MAC is the
+     * primary MAC plus one, so sorting the pair recovers which is which
+     * without needing the captions. */
+    const macs = [...new Set(t.match(/\b[0-9A-F]{12}\b/g) || [])]
+      .filter((m) => /[A-F]/.test(m))
+      .sort();
+
     if (isOnt) {
       ont.sn = ont.sn || extract(/(?:SERIAL|S\/N)[^\dOIS]*([0-9OIS]{12})/) || extract(/(?:^|\s)([0-9OIS]{12})(?:\s|$)/);
-      ont.mac = ont.mac || extract(/O[N0]U\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/);
-      ont.mta = ont.mta || extract(/MTA\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/);
+      ont.mac = ont.mac || extract(/O[N0]U\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || macs[0] || '';
+      ont.mta = ont.mta || extract(/MTA\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || macs[1] || '';
       ont.fsan = ont.fsan || fsan;
     } else {
-      router.mac = router.mac || extract(/(?:[^A-Z]|^)M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/);
+      router.mac = router.mac || extract(/(?:[^A-Z]|^)M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || macs[0] || '';
       router.fsan = router.fsan || fsan;
     }
   });

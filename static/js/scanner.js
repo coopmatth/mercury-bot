@@ -27,34 +27,37 @@ if (btnAi && btnLocal) {
   btnLocal.addEventListener('click', () => updateToggleUI(true));
 }
 
-// Rebuilds the Tesseract OCR data into your exact template by isolating each photo
+// Robust OCR Parser that corrects Tesseract typos (e.g. 'O' to '0')
 function formatOcrToTemplate(texts) {
   let ont = { mac: '', mta: '', fsan: '', sn: '' };
   let router = { fsan: '', mac: '' };
 
+  const fix = (s) => s ? s.replace(/O/g, '0').replace(/I/g, '1').replace(/S/g, '5') : '';
+
   texts.forEach(rawText => {
     const t = rawText.toUpperCase().replace(/\s+/g, ' ');
 
-    const allMacs = [...t.matchAll(/([0-9A-F]{12})/g)].map(m => m[1]).filter(m => !m.startsWith('CXNK'));
-    const allFsans = [...t.matchAll(/(CXNK[0-9A-F]{8})/g)].map(m => m[1]);
-    const allSerials = [...t.matchAll(/([0-9]{12})/g)].map(m => m[1]);
-
-    // Classify the photo based on hardware identifiers
-    const isOnt = t.includes('1101X') || t.includes('ONT') || t.includes('ONU MAC');
-
     const extract = (regex) => {
       const m = t.match(regex);
-      return m ? m[1].replace(/[-:\s=]/g, '') : null;
+      return m ? fix(m[1].replace(/[-:\s=]/g, '')) : '';
     };
 
+    // Safely identify the ONT even if Tesseract read "ONU" as "0NU"
+    const isOnt = t.includes('1101') || /O[N0]U/.test(t) || t.includes('GP11');
+
     if (isOnt) {
-      ont.sn = extract(/(?:SERIAL\s*NO\.?|S\/N)[\s:=]*([0-9]{12})/) || allSerials[0] || '';
-      ont.mac = extract(/ONU\s*MAC[\s:=]*([0-9A-F]{12})/) || allMacs[0] || '';
-      ont.mta = extract(/MTA\s*MAC[\s:=]*([0-9A-F]{12})/) || allMacs[1] || '';
-      ont.fsan = extract(/FSAN[\s:=]*(CXNK[0-9A-F]{8})/) || allFsans[0] || '';
+      ont.sn = extract(/(?:SERIAL|S\/N)[^\dOIS]*([0-9OIS]{12})/) || extract(/(?:^|\s)([0-9OIS]{12})(?:\s|$)/) || '';
+      ont.mac = extract(/O[N0]U\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
+      ont.mta = extract(/MTA\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
+      
+      let fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
+      if(fsanMatch) ont.fsan = 'CXNK' + fix(fsanMatch[1].substring(4));
     } else {
-      router.mac = extract(/(?:[^U]\s|^)MAC[\s:=]*([0-9A-F]{12})/) || extract(/MAC[\s:=]*([0-9A-F]{12})/) || allMacs[0] || '';
-      router.fsan = extract(/SSID[\s:=]*(CXNK[0-9A-F]{8})/) || extract(/FSAN[\s:=]*(CXNK[0-9A-F]{8})/) || allFsans[0] || '';
+      // Use [^A-Z] to ensure we grab "MAC" and not "MTA MAC"
+      router.mac = extract(/(?:[^A-Z]|^)M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
+      
+      let fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
+      if(fsanMatch) router.fsan = 'CXNK' + fix(fsanMatch[1].substring(4));
     }
   });
 
@@ -94,14 +97,12 @@ if (scannerForm) {
       let finalPayload = "";
 
       if (forceLocalEngine || !navigator.onLine) {
-        // Run Tesseract On-Device
         const worker = await Tesseract.createWorker('eng', 1, {
           workerPath: '/static/vendor/tesseract/worker.min.js',
           corePath: '/static/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
           langPath: '/static/vendor/tesseract'
         });
         
-        // Process each image separately into an array
         let texts = [];
         for (const file of fileInput.files) {
           const { data: { text } } = await worker.recognize(file);
@@ -112,13 +113,11 @@ if (scannerForm) {
         finalPayload = formatOcrToTemplate(texts);
 
       } else {
-        // Run AI Engine
         const formData = new FormData();
         for (const file of fileInput.files) formData.append('images', file);
         const res = await fetch('/api/parse-equipment', { method: 'POST', body: formData });
         const data = await res.json();
         
-        // If AI is successful, output exactly what the backend generated
         finalPayload = data.text || formatOcrToTemplate([]);
       }
       

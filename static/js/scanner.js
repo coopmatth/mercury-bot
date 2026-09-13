@@ -45,6 +45,51 @@ if (btnAi && btnLocal) {
   updateToggleUI(isNativeApp());
 }
 
+/* Which device is a given label photo of?
+ *
+ * Keyed on product families, because generic words on the label are not
+ * discriminating: the previous rule treated any label containing "PART" as an
+ * ONT — true of the GP1101X, but the GS7 gateway prints "Part No." too, so a
+ * GS7 was filed as an ONT and its MAC overwrote the real one.
+ *
+ * Gateways seen in the field: GigaSpire BLAST u6.3 (GS4229E), GS7 10GE Tri
+ * Gateway (GS5239E). ONTs: GP1101X XGS-PON. The credential block (SSID, WPA
+ * key, 192.168.x.x gateway address) only ever appears on a router, so it
+ * counts too — a gateway whose model line is glared out is still recognisable
+ * by the fact that it has a wifi password printed on it.
+ */
+const ROUTER_MARKERS = [
+  /\bGIGASPIRE\b/, /\bBLAST\b/, /\bGATEWAY\b/,
+  /\bGS\d{4}[A-Z]?\b/,        // GS4229E, GS5239E
+  /\bGS\d{1,2}\b/,            // GS7
+  /\bU6(?:\.\d+)?\b/,         // u6, u6.3
+  /\bU4M\b/,
+  /\b10GE\b/,
+  /\bSSID\b/, /\bWPA\b/,
+  /\bIP ADDRESS\b/, /\b192\.168\./,
+];
+
+const ONT_MARKERS = [
+  /\bONT\b/, /\bONU\b/, /\bPON\b/, /\bXGS\b/,
+  /\bGP\s?\d{4}/,             // GP1101X
+  /\b1101X?\b/,
+];
+
+function classify(text, ont) {
+  const hits = (markers) => markers.filter((re) => re.test(text)).length;
+  const ontScore = hits(ONT_MARKERS);
+  const routerScore = hits(ROUTER_MARKERS);
+
+  // Whichever family the label matches more of wins, so one stray word can't
+  // flip a whole photo.
+  if (ontScore !== routerScore) return ontScore > routerScore;
+
+  // Nothing decisive either way (a model line lost to glare, say). Every job
+  // has an ONT and only some have a router, so fill the ONT first and let a
+  // second unidentifiable label fall through to the router.
+  return !ont.mac && !ont.fsan;
+}
+
 function formatOcrToTemplate(texts) {
   let ont = { mac: '', mta: '', fsan: '', sn: '' };
   let router = { fsan: '', mac: '' };
@@ -59,19 +104,22 @@ function formatOcrToTemplate(texts) {
       return m ? fix(m[1].replace(/[-:\s=]/g, '')) : '';
     };
 
-    // Broadened classification: ONT labels use "PART NO" or "ONU", Routers use "MODEL NO"
-    const isOnt = /ONU/.test(t) || /PART/.test(t) || /1101/.test(t) || /GP11/.test(t);
+    const isOnt = classify(t, ont);
+
+    // First good read wins. A second photo of the same device — a reshoot, or
+    // a blurry angle that yields nothing — must not blank a field that an
+    // earlier photo already filled.
+    const fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
+    const fsan = fsanMatch ? 'CXNK' + fix(fsanMatch[1].substring(4)) : '';
 
     if (isOnt) {
-      ont.sn = extract(/(?:SERIAL|S\/N)[^\dOIS]*([0-9OIS]{12})/) || extract(/(?:^|\s)([0-9OIS]{12})(?:\s|$)/) || '';
-      ont.mac = extract(/O[N0]U\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
-      ont.mta = extract(/MTA\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
-      let fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
-      if(fsanMatch) ont.fsan = 'CXNK' + fix(fsanMatch[1].substring(4));
+      ont.sn = ont.sn || extract(/(?:SERIAL|S\/N)[^\dOIS]*([0-9OIS]{12})/) || extract(/(?:^|\s)([0-9OIS]{12})(?:\s|$)/);
+      ont.mac = ont.mac || extract(/O[N0]U\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/);
+      ont.mta = ont.mta || extract(/MTA\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/);
+      ont.fsan = ont.fsan || fsan;
     } else {
-      router.mac = extract(/(?:[^A-Z]|^)M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
-      let fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
-      if(fsanMatch) router.fsan = 'CXNK' + fix(fsanMatch[1].substring(4));
+      router.mac = router.mac || extract(/(?:[^A-Z]|^)M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/);
+      router.fsan = router.fsan || fsan;
     }
   });
 

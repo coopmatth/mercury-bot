@@ -27,36 +27,49 @@ if (btnAi && btnLocal) {
   btnLocal.addEventListener('click', () => updateToggleUI(true));
 }
 
-// Rebuilds the Tesseract OCR garbage into your required template
-function formatOcrToTemplate(rawText) {
-  const t = rawText.toUpperCase().replace(/\s+/g, ' ');
+// Rebuilds the Tesseract OCR data into your exact template by isolating each photo
+function formatOcrToTemplate(texts) {
+  let ont = { mac: '', mta: '', fsan: '', sn: '' };
+  let router = { fsan: '', mac: '' };
 
-  // Grab all 12-character identifiers in the raw text block
-  const allMacs = [...t.matchAll(/([0-9A-F]{12})/g)].map(m => m[1]).filter(m => !m.startsWith('CXNK'));
-  const allFsans = [...t.matchAll(/(CXNK[0-9A-F]{8})/g)].map(m => m[1]);
-  const allSerials = [...t.matchAll(/([0-9]{12})/g)].map(m => m[1]);
+  texts.forEach(rawText => {
+    const t = rawText.toUpperCase().replace(/\s+/g, ' ');
 
-  // Attempt to assign them based on specific label prefixes, fallback to array index
-  const ontMac = t.match(/ONU\s*MAC[\s:=]*([0-9A-F]{12})/) ? t.match(/ONU\s*MAC[\s:=]*([0-9A-F]{12})/)[1] : (allMacs[0] || '');
-  const mtaMac = t.match(/MTA\s*MAC[\s:=]*([0-9A-F]{12})/) ? t.match(/MTA\s*MAC[\s:=]*([0-9A-F]{12})/)[1] : (allMacs[1] || '');
-  const serial = t.match(/SERIAL\s*NO\.?[\s:=]*([0-9]{12})/) ? t.match(/SERIAL\s*NO\.?[\s:=]*([0-9]{12})/)[1] : (allSerials[0] || '');
-  
-  const ontFsan = allFsans[0] || '';
-  const routerFsan = allFsans.length > 1 ? allFsans[1] : (t.match(/SSID[\s:=]*(CXNK[0-9A-F]{8})/) ? t.match(/SSID[\s:=]*(CXNK[0-9A-F]{8})/)[1] : '');
-  const routerMac = allMacs.length > 2 ? allMacs[2] : (t.match(/(?:[^U]\s|^)MAC[\s:=]*([0-9A-F]{12})/) ? t.match(/(?:[^U]\s|^)MAC[\s:=]*([0-9A-F]{12})/)[1] : '');
+    const allMacs = [...t.matchAll(/([0-9A-F]{12})/g)].map(m => m[1]).filter(m => !m.startsWith('CXNK'));
+    const allFsans = [...t.matchAll(/(CXNK[0-9A-F]{8})/g)].map(m => m[1]);
+    const allSerials = [...t.matchAll(/([0-9]{12})/g)].map(m => m[1]);
+
+    // Classify the photo based on hardware identifiers
+    const isOnt = t.includes('1101X') || t.includes('ONT') || t.includes('ONU MAC');
+
+    const extract = (regex) => {
+      const m = t.match(regex);
+      return m ? m[1].replace(/[-:\s=]/g, '') : null;
+    };
+
+    if (isOnt) {
+      ont.sn = extract(/(?:SERIAL\s*NO\.?|S\/N)[\s:=]*([0-9]{12})/) || allSerials[0] || '';
+      ont.mac = extract(/ONU\s*MAC[\s:=]*([0-9A-F]{12})/) || allMacs[0] || '';
+      ont.mta = extract(/MTA\s*MAC[\s:=]*([0-9A-F]{12})/) || allMacs[1] || '';
+      ont.fsan = extract(/FSAN[\s:=]*(CXNK[0-9A-F]{8})/) || allFsans[0] || '';
+    } else {
+      router.mac = extract(/(?:[^U]\s|^)MAC[\s:=]*([0-9A-F]{12})/) || extract(/MAC[\s:=]*([0-9A-F]{12})/) || allMacs[0] || '';
+      router.fsan = extract(/SSID[\s:=]*(CXNK[0-9A-F]{8})/) || extract(/FSAN[\s:=]*(CXNK[0-9A-F]{8})/) || allFsans[0] || '';
+    }
+  });
 
   return `DROP= (AERIAL, HYBRID, NEEDS BURY)
 ONT INFO
-MAC = ${ontMac}
-MTA MAC = ${mtaMac}
-FSAN = ${ontFsan}
-S/N = ${serial}
+MAC = ${ont.mac}
+MTA MAC = ${ont.mta}
+FSAN = ${ont.fsan}
+S/N = ${ont.sn}
 DB Levels/Light Levels = 
 Fiber Jumper Length = 
 LCP = 
 ROUTER INFO 
-FSAN = ${routerFsan}
-MAC = ${routerMac}
+FSAN = ${router.fsan}
+MAC = ${router.mac}
 Provision speeds = 
 Actual Speeds = 
 Uploaded Pictures (Yes/No) = 
@@ -88,24 +101,25 @@ if (scannerForm) {
           langPath: '/static/vendor/tesseract'
         });
         
-        let combinedText = "";
+        // Process each image separately into an array
+        let texts = [];
         for (const file of fileInput.files) {
           const { data: { text } } = await worker.recognize(file);
-          combinedText += " " + text;
+          texts.push(text);
         }
         await worker.terminate();
         
-        // Format the raw local text into the template
-        finalPayload = formatOcrToTemplate(combinedText);
+        finalPayload = formatOcrToTemplate(texts);
 
       } else {
-        // Run AI Engine (which natively outputs the perfect template)
+        // Run AI Engine
         const formData = new FormData();
         for (const file of fileInput.files) formData.append('images', file);
         const res = await fetch('/api/parse-equipment', { method: 'POST', body: formData });
         const data = await res.json();
         
-        finalPayload = data.text || formatOcrToTemplate("");
+        // If AI is successful, output exactly what the backend generated
+        finalPayload = data.text || formatOcrToTemplate([]);
       }
       
       const saved = await window.mercury.saveScan({

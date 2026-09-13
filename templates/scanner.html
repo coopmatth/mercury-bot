@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-title">
   <h1>Equipment scanner</h1>
-  <p>Photograph the ONT and gateway labels. Use AI online, or force On-Device OCR. Multiple photos are combined into one result.</p>
+  <p>Photograph the ONT and gateway labels. Use AI online, or force On-Device OCR.</p>
 </div>
 
 <form id="scanner-form" class="card">
@@ -14,7 +14,6 @@
   </div>
   <div class="card-body">
     
-    <!-- Extraction Engine Toggle -->
     <div class="field mt-0 mb-2">
       <label>Extraction Engine</label>
       <div class="flex-between" style="background: rgba(8,13,25,.62); border: 1px solid var(--line); border-radius: 9px; padding: 4px; gap: 4px;">
@@ -39,11 +38,26 @@
 </form>
 
 <div class="section-label">Recent scans</div>
-<div id="scanner-results" class="list">
+<div id="scanner-results" class="list card" style="background: var(--surface); border-radius: var(--radius);">
+  {% if not scans %}
   <div class="empty">
     <div class="empty-icon">⧉</div>
     <h3>No saved scans</h3>
     <p>Saved scans stay on this device and sync when you have signal.</p>
   </div>
+  {% endif %}
+  {% for scan in scans %}
+  <div class="list-item" data-scan-id="{{ scan.id }}">
+    <div class="li-main">
+      <div class="li-title" style="font-size: 15px; white-space: pre-wrap; font-family: var(--mono); line-height: 1.4;">{{ scan.payload }}</div>
+      <div class="li-sub mt-1">{{ scan.created_at[:10]|nice_date }} · {{ scan.source }}</div>
+    </div>
+    <button type="button" class="btn btn-sm btn-danger delete-scan-btn" data-id="{{ scan.id }}">✕</button>
+  </div>
+  {% endfor %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/scanner.js"></script>
 {% endblock %}

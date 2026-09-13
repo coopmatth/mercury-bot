@@ -27,14 +27,15 @@ if (btnAi && btnLocal) {
   btnLocal.addEventListener('click', () => updateToggleUI(true));
 }
 
-// Robust OCR Parser that corrects Tesseract typos (e.g. 'O' to '0')
 function formatOcrToTemplate(texts) {
   let ont = { mac: '', mta: '', fsan: '', sn: '' };
   let router = { fsan: '', mac: '' };
+  let debugLog = "\n\n=== RAW OCR DEBUG LOG ===\n";
 
   const fix = (s) => s ? s.replace(/O/g, '0').replace(/I/g, '1').replace(/S/g, '5') : '';
 
-  texts.forEach(rawText => {
+  texts.forEach((rawText, index) => {
+    debugLog += `\n[PHOTO ${index + 1}]\n${rawText}\n`;
     const t = rawText.toUpperCase().replace(/\s+/g, ' ');
 
     const extract = (regex) => {
@@ -42,26 +43,23 @@ function formatOcrToTemplate(texts) {
       return m ? fix(m[1].replace(/[-:\s=]/g, '')) : '';
     };
 
-    // Safely identify the ONT even if Tesseract read "ONU" as "0NU"
-    const isOnt = t.includes('1101') || /O[N0]U/.test(t) || t.includes('GP11');
+    // Broadened classification: ONT labels use "PART NO" or "ONU", Routers use "MODEL NO"
+    const isOnt = /ONU/.test(t) || /PART/.test(t) || /1101/.test(t) || /GP11/.test(t);
 
     if (isOnt) {
       ont.sn = extract(/(?:SERIAL|S\/N)[^\dOIS]*([0-9OIS]{12})/) || extract(/(?:^|\s)([0-9OIS]{12})(?:\s|$)/) || '';
       ont.mac = extract(/O[N0]U\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
       ont.mta = extract(/MTA\s*M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
-      
       let fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
       if(fsanMatch) ont.fsan = 'CXNK' + fix(fsanMatch[1].substring(4));
     } else {
-      // Use [^A-Z] to ensure we grab "MAC" and not "MTA MAC"
       router.mac = extract(/(?:[^A-Z]|^)M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || extract(/M[A-Z]C[^\dA-Z]*([0-9A-Z]{12})/) || '';
-      
       let fsanMatch = t.match(/(CXNK[0-9A-Z]{8})/);
       if(fsanMatch) router.fsan = 'CXNK' + fix(fsanMatch[1].substring(4));
     }
   });
 
-  return `DROP= (AERIAL, HYBRID, NEEDS BURY)
+  const template = `DROP= (AERIAL, HYBRID, NEEDS BURY)
 ONT INFO
 MAC = ${ont.mac}
 MTA MAC = ${ont.mta}
@@ -77,6 +75,8 @@ Provision speeds =
 Actual Speeds = 
 Uploaded Pictures (Yes/No) = 
 Rough NID Location =`;
+
+  return template + debugLog;
 }
 
 const scannerForm = document.getElementById('scanner-form');
@@ -118,7 +118,8 @@ if (scannerForm) {
         const res = await fetch('/api/parse-equipment', { method: 'POST', body: formData });
         const data = await res.json();
         
-        finalPayload = data.text || formatOcrToTemplate([]);
+        // Append a blank debug block if using AI to maintain structure
+        finalPayload = (data.text || formatOcrToTemplate([])) + "\n\n=== RAW OCR DEBUG LOG ===\n[AI ENGINE USED - NO RAW LOGS]";
       }
       
       const saved = await window.mercury.saveScan({
@@ -150,7 +151,7 @@ function renderResult(payload, id, source) {
             <button type="button" class="btn btn-sm btn-danger delete-scan-btn" data-id="${id}">✕</button>
           </div>
         </div>
-        <div class="code-block" style="font-size: 13px; padding: 12px; min-height: auto; user-select: all; overflow-x: auto; background: var(--bg-2); border: 1px solid var(--line-soft);">${payload}</div>
+        <div class="code-block" style="font-size: 13px; padding: 12px; min-height: auto; user-select: all; overflow-x: auto; background: var(--bg-2); border: 1px solid var(--line-soft); white-space: pre-wrap;">${payload}</div>
       </div>
     </div>
   `;
@@ -169,7 +170,8 @@ document.addEventListener('click', async (e) => {
     window.mercury.toast('Scan deleted.', 'success');
   }
   if (e.target.classList.contains('copy-btn')) {
-    const text = decodeURIComponent(e.target.dataset.text);
+    // Strip the debug log before copying to clipboard
+    const text = decodeURIComponent(e.target.dataset.text).split('=== RAW OCR DEBUG LOG ===')[0].trim();
     navigator.clipboard.writeText(text);
     window.mercury.toast('Copied to clipboard!', 'success');
   }

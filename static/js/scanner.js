@@ -34,14 +34,16 @@ function parseEquipmentLabel(rawText) {
   if (text.includes('1101X') || text.includes('ONT')) result.type = 'ONT 1101X';
   else if (text.includes('U6.3') || text.includes('GS4229E')) result.type = 'ROUTER u6.3';
   else if (text.includes('GS7') || text.includes('GS5239E')) result.type = 'ROUTER GS7';
+  else if (text.includes('ROUTER INFO')) result.type = 'ROUTER';
 
   const extract = (regex) => {
     const match = text.match(regex);
-    return match ? match[1].replace(/[-:\s]/g, '') : null;
+    return match ? match[1].replace(/[-:\s=]/g, '') : null;
   };
 
-  result.serial = extract(/SERIAL\s*NO\.?\s*:\s*([0-9]{12})/) || extract(/(?:^|\s)([0-9]{12})(?:\s|$)/); 
-  result.mac = extract(/ONU\s*MAC\s*:\s*([0-9A-F]{12})/) || extract(/MTA\s*MAC\s*:\s*([0-9A-F]{12})/) || extract(/MAC\s*:\s*([0-9A-F]{12})/);
+  // Expanded to support AI "=" formatting and OCR ":" formatting
+  result.serial = extract(/(?:SERIAL\s*NO\.?|S\/N)[\s:=]+([0-9]{12})/) || extract(/(?:^|\s)([0-9]{12})(?:\s|$)/); 
+  result.mac = extract(/(?:ONU\s*MAC|MTA\s*MAC|MAC)[\s:=]+([0-9A-F]{12})/);
   result.id_string = extract(/(CXNK[0-9A-F]{8})/);
 
   return result;
@@ -65,10 +67,18 @@ if (scannerForm) {
       let rawText = "";
 
       if (forceLocalEngine || !navigator.onLine) {
+        // Force Tesseract to use your local cached files instead of the internet
+        const worker = await Tesseract.createWorker('eng', 1, {
+          workerPath: '/static/vendor/tesseract/worker.min.js',
+          corePath: '/static/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
+          langPath: '/static/vendor/tesseract'
+        });
+        
         for (const file of fileInput.files) {
-          const { data: { text } } = await Tesseract.recognize(file, 'eng');
+          const { data: { text } } = await worker.recognize(file);
           rawText += " " + text;
         }
+        await worker.terminate();
       } else {
         const formData = new FormData();
         for (const file of fileInput.files) formData.append('images', file);
@@ -80,7 +90,6 @@ if (scannerForm) {
       const equipment = parseEquipmentLabel(rawText);
       const payloadString = `TYPE: ${equipment.type}\nSN: ${equipment.serial || '—'}\nMAC: ${equipment.mac || '—'}\nID: ${equipment.id_string || '—'}`;
       
-      // Save it directly to the local IndexedDB to enable background syncing
       const saved = await window.mercury.saveScan({
         payload: payloadString,
         source: forceLocalEngine || !navigator.onLine ? 'offline' : 'ai'
@@ -89,6 +98,7 @@ if (scannerForm) {
       renderResult(equipment, saved.id);
 
     } catch (error) {
+      console.error(error);
       window.mercury.toast("Scan failed. Try adjusting the photo lighting.", "danger");
     } finally {
       readBtn.innerHTML = originalBtnText;
@@ -124,7 +134,6 @@ function renderResult(eq, id) {
   resultsContainer.insertAdjacentHTML('afterbegin', itemHtml);
 }
 
-// Global listener for deleting scans (works for both newly rendered and history items)
 document.addEventListener('click', async (e) => {
   if (e.target.classList.contains('delete-scan-btn')) {
     if (!confirm('Delete this saved scan?')) return;

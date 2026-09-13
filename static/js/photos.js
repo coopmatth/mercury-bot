@@ -5,6 +5,7 @@
  * uploaded over one bar of LTE. */
 
 import { toast, buzz } from './app.js';
+import { isNativeApp, savePhotos } from './native.js';
 
 const els = {
   files: document.getElementById('photo-files'),
@@ -69,6 +70,21 @@ function saveBlob(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+/* One photo, by whichever route the current container actually supports:
+ * the camera roll in the packaged app, a download everywhere else. */
+async function saveOne(output) {
+  if (!isNativeApp()) {
+    saveBlob(output.blob, output.name);
+    return;
+  }
+  try {
+    await savePhotos([output.blob]);
+    toast('Saved to your camera roll.', 'success');
+  } catch (error) {
+    toast(error?.message || 'Could not save to your camera roll.', 'danger', 8000);
+  }
+}
+
 els.button.addEventListener('click', async () => {
   const [edge, quality] = els.preset.value.split(':');
   els.button.disabled = true;
@@ -103,7 +119,7 @@ els.button.addEventListener('click', async () => {
     row.querySelector('.li-title').textContent = output.name;
     row.querySelector('.li-sub').textContent =
       `${output.dimensions} · ${humanSize(output.originalSize)} → ${humanSize(output.size)}`;
-    row.querySelector('button').addEventListener('click', () => saveBlob(output.blob, output.name));
+    row.querySelector('button').addEventListener('click', () => saveOne(output));
     els.list.appendChild(row);
   }
   els.results.classList.remove('hidden');
@@ -115,6 +131,29 @@ els.button.addEventListener('click', async () => {
 });
 
 els.downloadAll.addEventListener('click', async () => {
+  if (!outputs.length) return;
+
+  // Inside the packaged app, save straight to the camera roll. WKWebView
+  // implements neither file sharing nor <a download>, so both web paths below
+  // are silent no-ops there — which is why "Save all" appeared to do nothing
+  // in the app while working in the PWA.
+  if (isNativeApp()) {
+    const original = els.downloadAll.textContent;
+    els.downloadAll.disabled = true;
+    els.downloadAll.textContent = 'Saving…';
+    try {
+      const saved = await savePhotos(outputs.map((o) => o.blob));
+      buzz([12, 40, 12]);
+      toast(`Saved ${saved} ${saved === 1 ? 'photo' : 'photos'} to your camera roll.`, 'success');
+    } catch (error) {
+      toast(error?.message || 'Could not save to your camera roll.', 'danger', 8000);
+    } finally {
+      els.downloadAll.disabled = false;
+      els.downloadAll.textContent = original;
+    }
+    return;
+  }
+
   // Share sheet first: on a phone it lands the photos straight into the
   // upload the technician actually needs them in.
   const files = outputs.map((o) => new File([o.blob], o.name, { type: 'image/jpeg' }));

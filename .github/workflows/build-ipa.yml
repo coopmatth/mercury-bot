@@ -22,6 +22,11 @@ jobs:
           # Pinning to v6 ensures stability and matches standard iOS deployment targets
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/ios@6
 
+          # The app's own native plugin: Apple Vision OCR + camera-roll saving.
+          # Installed as a local package so Capacitor discovers it the normal
+          # way and CocoaPods compiles it in — no Xcode project surgery.
+          npm install ./native/mercury-native
+
       - name: Initialize Capacitor Shell
         run: |
           # Create a dummy web directory (required by Capacitor, though we bypass it)
@@ -56,6 +61,41 @@ jobs:
           
           # Now install the pods with the correct deployment target
           npx cap update ios
+
+      - name: Declare the permissions iOS requires
+        run: |
+          PLIST=ios/App/App/Info.plist
+
+          # iOS terminates the app outright if it touches one of these APIs
+          # without the matching usage string. The photo picker behind the
+          # file input offers "Take Photo", so the camera key is needed even
+          # though nothing in the app opens a camera directly.
+          set_key () {
+            /usr/libexec/PlistBuddy -c "Add :$1 string \"$2\"" "$PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Set :$1 \"$2\"" "$PLIST"
+          }
+
+          set_key NSPhotoLibraryAddUsageDescription \
+            "Mercury saves your compressed job photos straight to your camera roll."
+          set_key NSPhotoLibraryUsageDescription \
+            "Mercury reads the photos you pick so it can compress them and scan equipment labels."
+          set_key NSCameraUsageDescription \
+            "Mercury uses the camera to photograph equipment labels and job sites."
+
+          echo "--- resulting usage strings ---"
+          /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryAddUsageDescription" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryUsageDescription" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST"
+
+      - name: Verify the native plugin was compiled in
+        run: |
+          # A missing plugin does not fail the Xcode build — it just leaves the
+          # app with no OCR and no way to save photos, which is exactly the
+          # silent failure this whole change is meant to remove. Catch it here.
+          test -d node_modules/mercury-native || { echo "plugin package missing"; exit 1; }
+          grep -q "MercuryNative" ios/App/Podfile \
+            || { echo "MercuryNative pod was not added to the Podfile"; exit 1; }
+          echo "MercuryNative is wired into the iOS project."
 
       - name: Compile Unsigned IPA via Xcode
         run: |

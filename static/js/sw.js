@@ -21,13 +21,10 @@ const PRECACHE = [
   '/static/js/job-form.js',
   '/static/js/scanner.js',
   '/static/js/photos.js',
-  // The on-device OCR engine. Deliberately precached here so offline
-  // scanning is guaranteed present the moment the service worker installs.
-  '/static/vendor/tesseract/tesseract.min.js',
-  '/static/vendor/tesseract/worker.min.js',
-  '/static/vendor/tesseract/tesseract-core-lstm.wasm.js',
-  '/static/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
-  '/static/vendor/tesseract/eng.traineddata.gz',
+  '/static/js/native.js',
+  // The OCR engine used to be precached here — ~9.7 MB of Tesseract wasm on
+  // every install. On-device reading is now Apple's Vision framework, which
+  // lives in the packaged app and needs nothing cached to work offline.
   '/static/icons/logo.png',
   '/manifest.webmanifest',
   '/api/bootstrap',

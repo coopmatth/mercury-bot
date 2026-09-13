@@ -1,3 +1,5 @@
+import { isNativeApp, recognizeText } from './native.js';
+
 let forceLocalEngine = false;
 
 const btnAi = document.getElementById('toggle-ai');
@@ -24,7 +26,23 @@ function updateToggleUI(useLocal) {
 
 if (btnAi && btnLocal) {
   btnAi.addEventListener('click', () => updateToggleUI(false));
-  btnLocal.addEventListener('click', () => updateToggleUI(true));
+  btnLocal.addEventListener('click', () => {
+    updateToggleUI(true);
+    // On-device reading is Apple's Vision engine, which only exists inside the
+    // packaged app. Say so at the moment of choosing rather than letting the
+    // scan fail later with nothing to act on.
+    if (!isNativeApp()) {
+      window.mercury.toast(
+        'On-device reading needs the Mercury iOS app. In a browser, use the AI engine while online.',
+        'warning', 7000);
+    }
+  });
+
+  // Offline in a browser there is no reader at all, so don't leave the AI
+  // engine looking like it is standing by.
+  if (!isNativeApp() && !navigator.onLine) {
+    updateToggleUI(false);
+  }
 }
 
 function formatOcrToTemplate(texts) {
@@ -97,19 +115,10 @@ if (scannerForm) {
       let finalPayload = "";
 
       if (forceLocalEngine || !navigator.onLine) {
-        const worker = await Tesseract.createWorker('eng', 1, {
-          workerPath: '/static/vendor/tesseract/worker.min.js',
-          corePath: '/static/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
-          langPath: '/static/vendor/tesseract'
-        });
-        
-        let texts = [];
-        for (const file of fileInput.files) {
-          const { data: { text } } = await worker.recognize(file);
-          texts.push(text);
-        }
-        await worker.terminate();
-        
+        // Apple's Vision engine, via the native shell. There is no model to
+        // download and nothing to warm up, so this works with zero signal the
+        // first time it is ever used — which the old bundled OCR did not.
+        const texts = await recognizeText([...fileInput.files]);
         finalPayload = formatOcrToTemplate(texts);
 
       } else {
@@ -131,7 +140,11 @@ if (scannerForm) {
 
     } catch (error) {
       console.error(error);
-      window.mercury.toast("Scan failed. Try adjusting the photo lighting.", "danger");
+      // Surface the real reason when there is one — "needs the iOS app" and
+      // "couldn't read that label" call for completely different responses.
+      window.mercury.toast(
+        error?.message || 'Scan failed. Try adjusting the photo lighting.',
+        'danger', 8000);
     } finally {
       readBtn.innerHTML = originalBtnText;
       readBtn.disabled = false;

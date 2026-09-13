@@ -59,7 +59,8 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Restore the Tesseract script required for On-Device OCR -->
-<script src="/static/vendor/tesseract/tesseract.min.js"></script>
+<!-- On-device OCR is Apple's Vision engine, reached through the packaged app's
+     native bridge (static/js/native.js). Nothing to load here: the previous
+     bundled Tesseract build was ~9.7 MB of wasm shipped to every device. -->
 <script type="module" src="/static/js/scanner.js"></script>
 {% endblock %}

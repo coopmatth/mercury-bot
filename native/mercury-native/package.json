@@ -1,0 +1,21 @@
+{
+  "name": "mercury-native",
+  "version": "1.0.0",
+  "description": "Apple Vision on-device OCR and Photos-library saving for Mercury Tracker.",
+  "main": "dist/plugin.js",
+  "types": "dist/plugin.d.ts",
+  "files": [
+    "dist/",
+    "ios/",
+    "MercuryNative.podspec"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^6.0.0"
+  },
+  "license": "MIT"
+}

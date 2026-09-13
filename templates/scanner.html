@@ -59,5 +59,7 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Restore the Tesseract script required for On-Device OCR -->
+<script src="/static/vendor/tesseract/tesseract.min.js"></script>
 <script type="module" src="/static/js/scanner.js"></script>
 {% endblock %}

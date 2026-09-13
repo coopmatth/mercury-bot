@@ -27,26 +27,40 @@ if (btnAi && btnLocal) {
   btnLocal.addEventListener('click', () => updateToggleUI(true));
 }
 
-function parseEquipmentLabel(rawText) {
-  const text = rawText.toUpperCase().replace(/\s+/g, ' ');
-  const result = { type: 'UNKNOWN', serial: null, mac: null, id_string: null };
+// Rebuilds the Tesseract OCR garbage into your required template
+function formatOcrToTemplate(rawText) {
+  const t = rawText.toUpperCase().replace(/\s+/g, ' ');
 
-  if (text.includes('1101X') || text.includes('ONT')) result.type = 'ONT 1101X';
-  else if (text.includes('U6.3') || text.includes('GS4229E')) result.type = 'ROUTER u6.3';
-  else if (text.includes('GS7') || text.includes('GS5239E')) result.type = 'ROUTER GS7';
-  else if (text.includes('ROUTER INFO')) result.type = 'ROUTER';
+  // Grab all 12-character identifiers in the raw text block
+  const allMacs = [...t.matchAll(/([0-9A-F]{12})/g)].map(m => m[1]).filter(m => !m.startsWith('CXNK'));
+  const allFsans = [...t.matchAll(/(CXNK[0-9A-F]{8})/g)].map(m => m[1]);
+  const allSerials = [...t.matchAll(/([0-9]{12})/g)].map(m => m[1]);
 
-  const extract = (regex) => {
-    const match = text.match(regex);
-    return match ? match[1].replace(/[-:\s=]/g, '') : null;
-  };
+  // Attempt to assign them based on specific label prefixes, fallback to array index
+  const ontMac = t.match(/ONU\s*MAC[\s:=]*([0-9A-F]{12})/) ? t.match(/ONU\s*MAC[\s:=]*([0-9A-F]{12})/)[1] : (allMacs[0] || '');
+  const mtaMac = t.match(/MTA\s*MAC[\s:=]*([0-9A-F]{12})/) ? t.match(/MTA\s*MAC[\s:=]*([0-9A-F]{12})/)[1] : (allMacs[1] || '');
+  const serial = t.match(/SERIAL\s*NO\.?[\s:=]*([0-9]{12})/) ? t.match(/SERIAL\s*NO\.?[\s:=]*([0-9]{12})/)[1] : (allSerials[0] || '');
+  
+  const ontFsan = allFsans[0] || '';
+  const routerFsan = allFsans.length > 1 ? allFsans[1] : (t.match(/SSID[\s:=]*(CXNK[0-9A-F]{8})/) ? t.match(/SSID[\s:=]*(CXNK[0-9A-F]{8})/)[1] : '');
+  const routerMac = allMacs.length > 2 ? allMacs[2] : (t.match(/(?:[^U]\s|^)MAC[\s:=]*([0-9A-F]{12})/) ? t.match(/(?:[^U]\s|^)MAC[\s:=]*([0-9A-F]{12})/)[1] : '');
 
-  // Expanded to support AI "=" formatting and OCR ":" formatting
-  result.serial = extract(/(?:SERIAL\s*NO\.?|S\/N)[\s:=]+([0-9]{12})/) || extract(/(?:^|\s)([0-9]{12})(?:\s|$)/); 
-  result.mac = extract(/(?:ONU\s*MAC|MTA\s*MAC|MAC)[\s:=]+([0-9A-F]{12})/);
-  result.id_string = extract(/(CXNK[0-9A-F]{8})/);
-
-  return result;
+  return `DROP= (AERIAL, HYBRID, NEEDS BURY)
+ONT INFO
+MAC = ${ontMac}
+MTA MAC = ${mtaMac}
+FSAN = ${ontFsan}
+S/N = ${serial}
+DB Levels/Light Levels = 
+Fiber Jumper Length = 
+LCP = 
+ROUTER INFO 
+FSAN = ${routerFsan}
+MAC = ${routerMac}
+Provision speeds = 
+Actual Speeds = 
+Uploaded Pictures (Yes/No) = 
+Rough NID Location =`;
 }
 
 const scannerForm = document.getElementById('scanner-form');
@@ -64,38 +78,42 @@ if (scannerForm) {
     readBtn.disabled = true;
 
     try {
-      let rawText = "";
+      let finalPayload = "";
 
       if (forceLocalEngine || !navigator.onLine) {
-        // Force Tesseract to use your local cached files instead of the internet
+        // Run Tesseract On-Device
         const worker = await Tesseract.createWorker('eng', 1, {
           workerPath: '/static/vendor/tesseract/worker.min.js',
           corePath: '/static/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
           langPath: '/static/vendor/tesseract'
         });
         
+        let combinedText = "";
         for (const file of fileInput.files) {
           const { data: { text } } = await worker.recognize(file);
-          rawText += " " + text;
+          combinedText += " " + text;
         }
         await worker.terminate();
+        
+        // Format the raw local text into the template
+        finalPayload = formatOcrToTemplate(combinedText);
+
       } else {
+        // Run AI Engine (which natively outputs the perfect template)
         const formData = new FormData();
         for (const file of fileInput.files) formData.append('images', file);
         const res = await fetch('/api/parse-equipment', { method: 'POST', body: formData });
         const data = await res.json();
-        rawText = data.text || "";
+        
+        finalPayload = data.text || formatOcrToTemplate("");
       }
-
-      const equipment = parseEquipmentLabel(rawText);
-      const payloadString = `TYPE: ${equipment.type}\nSN: ${equipment.serial || '—'}\nMAC: ${equipment.mac || '—'}\nID: ${equipment.id_string || '—'}`;
       
       const saved = await window.mercury.saveScan({
-        payload: payloadString,
+        payload: finalPayload,
         source: forceLocalEngine || !navigator.onLine ? 'offline' : 'ai'
       });
 
-      renderResult(equipment, saved.id);
+      renderResult(finalPayload, saved.id, saved.source);
 
     } catch (error) {
       console.error(error);
@@ -108,24 +126,19 @@ if (scannerForm) {
   });
 }
 
-function renderResult(eq, id) {
-  const isComplete = eq.serial && eq.mac && eq.id_string;
-  const statusHtml = isComplete ? `<span class="badge badge-green">Complete</span>` : `<span class="badge badge-amber">Missing Data</span>`;
-
+function renderResult(payload, id, source) {
   const itemHtml = `
-    <div class="list-item" data-scan-id="${id}">
-      <div class="li-main">
-        <div class="flex-between mb-1">
-          <div class="li-title" style="font-size: 16px;">${eq.type}</div>
-          ${statusHtml}
+    <div class="list-item" data-scan-id="${id}" style="align-items: flex-start; padding: 16px;">
+      <div class="li-main" style="width: 100%;">
+        <div class="flex-between mb-2">
+          <span class="badge badge-soft">${source === 'ai' ? '✨ AI Engine' : '📱 On-Device'}</span>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-sm btn-primary copy-btn" data-text="${encodeURIComponent(payload)}">Copy</button>
+            <button type="button" class="btn btn-sm btn-danger delete-scan-btn" data-id="${id}">✕</button>
+          </div>
         </div>
-        <div class="li-sub" style="font-family: var(--mono); color: var(--text);">
-          <div><span style="color: var(--text-mute);">SN:</span> ${eq.serial || '—'}</div>
-          <div><span style="color: var(--text-mute);">MAC:</span> ${eq.mac || '—'}</div>
-          <div><span style="color: var(--text-mute);">ID:</span> ${eq.id_string || '—'}</div>
-        </div>
+        <div class="code-block" style="font-size: 13px; padding: 12px; min-height: auto; user-select: all; overflow-x: auto; background: var(--bg-2); border: 1px solid var(--line-soft);">${payload}</div>
       </div>
-      <button type="button" class="btn btn-sm btn-danger delete-scan-btn" data-id="${id}">✕</button>
     </div>
   `;
 
@@ -141,5 +154,10 @@ document.addEventListener('click', async (e) => {
     await window.mercury.removeRow('equipment_scans', id);
     e.target.closest('.list-item').remove();
     window.mercury.toast('Scan deleted.', 'success');
+  }
+  if (e.target.classList.contains('copy-btn')) {
+    const text = decodeURIComponent(e.target.dataset.text);
+    navigator.clipboard.writeText(text);
+    window.mercury.toast('Copied to clipboard!', 'success');
   }
 });

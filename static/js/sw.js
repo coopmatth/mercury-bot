@@ -21,17 +21,8 @@ const PRECACHE = [
   '/static/js/job-form.js',
   '/static/js/scanner.js',
   '/static/js/photos.js',
-  // The on-device OCR engine. ~9.7 MB combined, and deliberately precached
-  // here rather than fetched opportunistically from a page: a page-scoped
-  // fetch only ever gets a chance to run if the technician happens to visit
-  // /scanner while online and stays long enough for it to finish, and is
-  // aborted with nothing cached if they navigate away first. Since offline
-  // scanning is the one feature that has to work with zero signal, it can't
-  // depend on that happening — it has to be guaranteed present the moment
-  // the service worker finishes installing, whichever page was opened
-  // first. Both wasm variants are included since Tesseract.js picks
-  // whichever one the device's SIMD support calls for at runtime, and only
-  // caching one would leave devices that need the other with nothing.
+  // The on-device OCR engine. Deliberately precached here so offline
+  // scanning is guaranteed present the moment the service worker installs.
   '/static/vendor/tesseract/tesseract.min.js',
   '/static/vendor/tesseract/worker.min.js',
   '/static/vendor/tesseract/tesseract-core-lstm.wasm.js',
@@ -80,35 +71,7 @@ self.addEventListener('fetch', (event) => {
     return; 
   }
 
-  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      try {
-        const response = await fetch(request);
-        const cache = await caches.open(RUNTIME);
-        cache.put(request, response.clone());
-        return response;
-      } catch (e) {
-        return (await caches.match(request))
-            || (await caches.match(url.pathname))
-            || (await caches.match('/offline'))
-            || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
-      }
-    })());
-    return;
-  }
-
-  if (isStatic(url)) {
-    event.respondWith((async () => {
-      const cached = await caches.match(request);
-      if (cached) return cached;
-      const response = await fetch(request);
-      const cache = await caches.open(SHELL);
-      cache.put(request, response.clone());
-      return response;
-    })());
-    return;
-  }
-
+  // 1. Handle API Requests
   if (url.pathname.startsWith('/api/')) {
     event.respondWith((async () => {
       try {
@@ -124,7 +87,44 @@ self.addEventListener('fetch', (event) => {
         });
       }
     })());
+    return;
   }
+
+  // 2. Handle Static Files (CSS, JS, Images, WASM)
+  if (isStatic(url)) {
+    event.respondWith((async () => {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      const cache = await caches.open(SHELL);
+      cache.put(request, response.clone());
+      return response;
+    })());
+    return;
+  }
+
+  // 3. Handle HTML Pages (Native Navigations & SPA Router Fetches)
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(request);
+      const cache = await caches.open(RUNTIME);
+      cache.put(request, response.clone());
+      return response;
+    } catch (e) {
+      // EXPLICITLY check the fresh RUNTIME cache before the frozen SHELL cache
+      const runtimeCache = await caches.open(RUNTIME);
+      let cached = (await runtimeCache.match(request)) || (await runtimeCache.match(url.pathname));
+
+      // Fall back to the original SHELL install only if RUNTIME is empty
+      if (!cached) {
+        cached = (await caches.match(request)) || (await caches.match(url.pathname));
+      }
+
+      return cached
+          || (await caches.match('/offline'))
+          || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+    }
+  })());
 });
 
 self.addEventListener('sync', (event) => {

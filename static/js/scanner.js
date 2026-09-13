@@ -1,367 +1,153 @@
-import { saveScan, store, toast, buzz } from './app.js';
+/* ---------------------------------------------------- scanner.js */
 
-const TEMPLATE = ({ ontMac = '', mtaMac = '', ontFsan = '', serial = '',
-                    routerFsan = '', routerMac = '', extra = '' }) =>
-`DROP= (AERIAL, HYBRID, NEEDS BURY)
-ONT INFO
-MAC = ${ontMac}
-MTA MAC = ${mtaMac}
-FSAN = ${ontFsan}
-S/N = ${serial}
-DB Levels/Light Levels = 
-Fiber Jumper Length = 
-LCP = 
-ROUTER INFO 
-FSAN = ${routerFsan}
-MAC = ${routerMac}
-Provision speeds = 
-Actual Speeds = 
-Uploaded Pictures (Yes/No) = 
-Rough NID Location = ${extra}`;
+// --- 1. Engine Toggle Logic ---
+let forceLocalEngine = false;
 
-const els = {
-  files: document.getElementById('files'),
-  thumbs: document.getElementById('thumbs'),
-  scan: document.getElementById('scan-btn'),
-  engine: document.getElementById('engine-pill'),
-  progressWrap: document.getElementById('progress-wrap'),
-  progressText: document.getElementById('progress-text'),
-  progressBar: document.getElementById('progress-bar'),
-  resultCard: document.getElementById('result-card'),
-  resultSource: document.getElementById('result-source'),
-  output: document.getElementById('output'),
-  copy: document.getElementById('copy-btn'),
-  saveScan: document.getElementById('save-scan-btn'),
-  list: document.getElementById('scan-list'),
-  count: document.getElementById('scan-count'),
-};
+const btnAi = document.getElementById('toggle-ai');
+const btnLocal = document.getElementById('toggle-local');
 
-let selected = [];
-
-function updateEngine() {
-  const online = navigator.onLine;
-  els.engine.className = online ? 'pill pill-online' : 'pill pill-offline';
-  els.engine.innerHTML = '<span class="dot"></span><span></span>';
-  els.engine.lastElementChild.textContent = online ? 'AI reader' : 'On-device OCR';
-}
-window.addEventListener('online', updateEngine);
-window.addEventListener('offline', updateEngine);
-updateEngine();
-
-function progress(text, fraction = null) {
-  els.progressWrap.classList.remove('hidden');
-  els.progressText.textContent = text;
-  if (fraction !== null) els.progressBar.style.width = `${Math.round(fraction * 100)}%`;
-}
-
-function hideProgress() {
-  els.progressWrap.classList.add('hidden');
-  els.progressBar.style.width = '0%';
-}
-
-els.files.addEventListener('change', () => {
-  selected = [...els.files.files];
-  els.thumbs.innerHTML = '';
-  for (const file of selected) {
-    const img = document.createElement('img');
-    img.src = URL.createObjectURL(file);
-    img.onload = () => URL.revokeObjectURL(img.src);
-    Object.assign(img.style, {
-      width: '62px', height: '62px', objectFit: 'cover',
-      borderRadius: '10px', border: '1px solid var(--line)',
-    });
-    els.thumbs.appendChild(img);
-  }
-  els.scan.disabled = selected.length === 0;
-  els.scan.textContent = selected.length
-    ? `Read ${selected.length} ${selected.length === 1 ? 'label' : 'labels'}`
-    : 'Read labels';
-});
-
-async function preprocess(file) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(2.5, Math.max(1, 1800 / Math.max(bitmap.width, bitmap.height)));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close?.();
-
-  // Grayscale + linear contrast stretch — no hard black/white threshold. A
-  // fixed cutoff at 92% of the frame's mean luminance held up on flat,
-  // evenly-lit labels but corrupted characters under a shadow or glare
-  // gradient (confirmed against a real GigaSpire label: it flipped a MAC's
-  // digits into characters outside 0-9A-F, which silently dropped the whole
-  // match rather than just losing a little accuracy). Plain grayscale fixed
-  // that but left low-contrast text under-defined enough that Tesseract
-  // dropped a character out of an adjacent field on the same label.
-  // Stretching the frame's actual min-max luminance range to fill 0-255
-  // gave Tesseract sharper edges to work with without ever forcing a
-  // pixel fully black or white, and read every field on both labels
-  // correctly — identical output to the old code on the label that already
-  // worked.
-  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const px = image.data;
-  const lums = new Float32Array(px.length / 4);
-  let min = 255, max = 0;
-  for (let i = 0, j = 0; i < px.length; i += 4, j += 1) {
-    const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    lums[j] = lum;
-    if (lum < min) min = lum;
-    if (lum > max) max = lum;
-  }
-  const range = Math.max(1, max - min);
-  for (let i = 0, j = 0; i < px.length; i += 4, j += 1) {
-    const value = Math.max(0, Math.min(255, ((lums[j] - min) / range) * 255));
-    px[i] = px[i + 1] = px[i + 2] = value;
-  }
-  ctx.putImageData(image, 0, 0);
-  return canvas;
-}
-
-/* MACs print in more than one format. Calix ONT labels commonly run all 12
- * hex characters together with nothing between them; gateway labels —
- * GigaSpire included — very commonly separate each pair with a colon or
- * hyphen, sometimes group them in dot-separated quads. Only matching the
- * unbroken form meant a label printed either other way produced nothing at
- * all, even with perfect OCR: this is why the ONT "filled in quick" while
- * the router came back empty. Each pattern is normalized to a clean,
- * unbroken 12-character string on its own matched text — never by
- * stripping separators across the whole OCR dump, which risks gluing
- * digits from unrelated lines into a false match. */
-const MAC_PATTERNS = [
-  /\b[0-9A-F]{12}\b/g,                                   // 441B86A2D004
-  /\b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\b/g,               // 44:1B:86:A2:D0:04
-  /\b(?:[0-9A-F]{4}[.:-]){2}[0-9A-F]{4}\b/g,              // 441B.86A2.D004
-];
-
-function extractMacs(text) {
-  const found = new Set();
-  for (const pattern of MAC_PATTERNS) {
-    for (const match of text.match(pattern) || []) {
-      found.add(match.replace(/[:.\-]/g, ''));
-    }
-  }
-  return found;
-}
-
-function extractFields(rawText) {
-  const upper = rawText.toUpperCase();
-  const isOnt = /\bONT\b|PON|1101|803/.test(upper);
-  const isRouter = /GIGA|BLAST|U6|U4M|10GW|ROUTER|SSID/.test(upper);
-
-  const clean = upper.replace(/[OQ]/g, '0').replace(/I/g, '1');
-  const fsans = [...new Set(clean.match(/CXNK[0-9A-F]{8}/g) || [])];
-  const serials = [...new Set(clean.match(/\b\d{12,15}\b/g) || [])];
-  const macs = [...extractMacs(clean)].filter((m) => !serials.includes(m));
-
-  return { isOnt, isRouter, fsans, serials, macs };
-}
-
-function assemble(findings) {
-  const ont = { fsans: [], macs: [], serials: [] };
-  const router = { fsans: [], macs: [] };
-  const unknown = { fsans: [], macs: [], serials: [] };
-
-  for (const f of findings) {
-    const bucket = f.isOnt ? ont : (f.isRouter ? router : unknown);
-    bucket.fsans.push(...f.fsans);
-    bucket.macs.push(...f.macs);
-    if (bucket.serials) bucket.serials.push(...f.serials);
-    else unknown.serials.push(...f.serials);
-  }
-
-  const uniq = (a) => [...new Set(a)];
-  ont.fsans = uniq(ont.fsans); ont.macs = uniq(ont.macs); ont.serials = uniq(ont.serials);
-  router.fsans = uniq(router.fsans); router.macs = uniq(router.macs);
-  unknown.fsans = uniq(unknown.fsans); unknown.macs = uniq(unknown.macs);
-  unknown.serials = uniq(unknown.serials);
-
-  // Router's empty slot claims a leftover before the ONT's *optional*
-  // second slot (the MTA MAC) does. A photo that couldn't be classified by
-  // keyword still has its MAC/FSAN land here, and if the ONT already has
-  // its primary MAC, leaving the router with nothing is a worse failure
-  // than the ONT missing its nice-to-have second value.
-  if (!router.fsans.length && unknown.fsans.length) router.fsans.push(unknown.fsans.shift());
-  if (!ont.fsans.length && unknown.fsans.length) ont.fsans.push(unknown.fsans.shift());
-  if (!router.macs.length && unknown.macs.length) router.macs.push(unknown.macs.shift());
-  while (ont.macs.length < 2 && unknown.macs.length) ont.macs.push(unknown.macs.shift());
-
-  return TEMPLATE({
-    ontMac: ont.macs[0] || '',
-    mtaMac: ont.macs[1] || '',
-    ontFsan: ont.fsans[0] || '',
-    serial: ont.serials[0] || unknown.serials[0] || '',
-    routerFsan: router.fsans[0] || unknown.fsans[0] || '',
-    routerMac: router.macs[0] || '',
-  });
-}
-
-async function runOfflineOcr() {
-  if (typeof Tesseract === 'undefined') {
-    throw new Error('The offline reader is still downloading. Try again in a moment.');
-  }
-
-  progress('Starting the on-device reader…', 0.02);
-  const worker = await Tesseract.createWorker('eng', 1, {
-    workerPath: '/static/vendor/tesseract/worker.min.js',
-    corePath: '/static/vendor/tesseract/',
-    langPath: '/static/vendor/tesseract/',
-    gzip: true,
-    logger: (m) => {
-      if (m.status === 'recognizing text') progress('Reading the label…', 0.15 + m.progress * 0.8);
-    },
-  });
-
-  try {
-    await worker.setParameters({
-      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
-      tessedit_char_whitelist:
-        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:.-/# ',
-    });
-
-    const findings = [];
-    for (let i = 0; i < selected.length; i += 1) {
-      progress(`Reading photo ${i + 1} of ${selected.length}…`, i / selected.length);
-      const canvas = await preprocess(selected[i]);
-      const { data } = await worker.recognize(canvas);
-      findings.push(extractFields(data.text || ''));
-    }
-    return assemble(findings);
-  } finally {
-    await worker.terminate();
+function updateToggleUI(useLocal) {
+  forceLocalEngine = useLocal;
+  if (useLocal) {
+    btnLocal.style.background = 'var(--surface-2)';
+    btnLocal.style.borderColor = 'var(--line)';
+    btnLocal.style.color = 'var(--text)';
+    
+    btnAi.style.background = 'transparent';
+    btnAi.style.borderColor = 'transparent';
+    btnAi.style.color = 'var(--text-mute)';
+  } else {
+    btnAi.style.background = 'var(--surface-2)';
+    btnAi.style.borderColor = 'var(--line)';
+    btnAi.style.color = 'var(--text)';
+    
+    btnLocal.style.background = 'transparent';
+    btnLocal.style.borderColor = 'transparent';
+    btnLocal.style.color = 'var(--text-mute)';
   }
 }
 
-async function compressForAI(file) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close?.();
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+if (btnAi && btnLocal) {
+  btnAi.addEventListener('click', () => updateToggleUI(false));
+  btnLocal.addEventListener('click', () => updateToggleUI(true));
 }
 
-async function runAiParse() {
-  progress('Compressing photos for fast upload…', 0.1);
-  const body = new FormData();
+// --- 2. Strict Equipment Parsing Engine ---
+function parseEquipmentLabel(rawText) {
+  // Normalize text to handle OCR inconsistencies (spaces, line breaks)
+  const text = rawText.toUpperCase().replace(/\s+/g, ' ');
   
-  for (let i = 0; i < selected.length; i++) {
-    const blob = await compressForAI(selected[i]);
-    body.append('images', blob, selected[i].name);
+  const result = {
+    type: 'UNKNOWN',
+    serial: null,
+    mac: null,
+    id_string: null 
+  };
+
+  // Identify hardware model
+  if (text.includes('1101X') || text.includes('ONT')) {
+    result.type = 'ONT 1101X';
+  } else if (text.includes('U6.3') || text.includes('GS4229E')) {
+    result.type = 'ROUTER u6.3';
+  } else if (text.includes('GS7') || text.includes('GS5239E')) {
+    result.type = 'ROUTER GS7';
   }
 
-  progress('Sending photos to the AI reader…', 0.4);
-  const response = await fetch('/api/parse-equipment', { method: 'POST', body });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.ok) {
-    throw Object.assign(new Error(data.error || `Server responded ${response.status}`),
-                        { fallback: data.fallback === 'offline' });
-  }
-  return data.text;
+  // Regex extractor targeting specific 12-char blocks and CXNK structures
+  const extract = (regex) => {
+    const match = text.match(regex);
+    return match ? match[1].replace(/[-:\s]/g, '') : null;
+  };
+
+  // Serial: Exactly 12 numeric digits
+  result.serial = extract(/SERIAL\s*NO\.?\s*:\s*([0-9]{12})/) 
+               || extract(/(?:^|\s)([0-9]{12})(?:\s|$)/); 
+
+  // MAC: 12 Hex characters. Catch standard MAC, ONU MAC, or MTA MAC.
+  result.mac = extract(/ONU\s*MAC\s*:\s*([0-9A-F]{12})/) 
+            || extract(/MTA\s*MAC\s*:\s*([0-9A-F]{12})/)
+            || extract(/MAC\s*:\s*([0-9A-F]{12})/);
+
+  // FSAN/SSID: Always begins with CXNK followed by exactly 8 Hex characters
+  result.id_string = extract(/(CXNK[0-9A-F]{8})/);
+
+  return result;
 }
 
-els.scan.addEventListener('click', async () => {
-  if (!selected.length) return;
-  els.scan.disabled = true;
-  els.resultCard.classList.add('hidden');
+// --- 3. Scanner Form Submission ---
+const scannerForm = document.getElementById('scanner-form');
+const fileInput = document.getElementById('scanner-files');
+const readBtn = document.getElementById('read-btn');
+const resultsContainer = document.getElementById('scanner-results');
 
-  let text = null;
-  let source = 'On-device OCR';
+if (scannerForm) {
+  scannerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!fileInput.files.length) return;
 
-  try {
-    if (navigator.onLine) {
-      try {
-        text = await runAiParse();
-        source = 'AI reader';
-      } catch (error) {
-        toast(`${error.message} Falling back to on-device OCR.`, 'warning', 5000);
-        text = await runOfflineOcr();
+    const originalBtnText = readBtn.innerHTML;
+    readBtn.innerHTML = '<span class="spinner"></span> Processing...';
+    readBtn.disabled = true;
+
+    try {
+      let rawText = "";
+
+      // Route image to chosen engine (force local if offline)
+      if (forceLocalEngine || !navigator.onLine) {
+        // Tesseract On-Device Processing
+        for (const file of fileInput.files) {
+          const { data: { text } } = await Tesseract.recognize(file, 'eng');
+          rawText += " " + text;
+        }
+      } else {
+        // AI Backend Processing
+        const formData = new FormData();
+        for (const file of fileInput.files) {
+          formData.append('images', file);
+        }
+        const res = await fetch('/api/scanner/analyze', { method: 'POST', body: formData });
+        const data = await res.json();
+        rawText = data.text || "";
       }
-    } else {
-      text = await runOfflineOcr();
+
+      // Parse the unified text block
+      const equipment = parseEquipmentLabel(rawText);
+      renderResult(equipment);
+
+    } catch (error) {
+      console.error("Scan failed:", error);
+      alert("Scan failed. Try adjusting the photo lighting.");
+    } finally {
+      readBtn.innerHTML = originalBtnText;
+      readBtn.disabled = false;
+      fileInput.value = ''; // Reset input
     }
-
-    els.output.value = text;
-    els.resultSource.textContent = source;
-    els.resultCard.classList.remove('hidden');
-    els.resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    buzz([12, 40, 12]);
-  } catch (error) {
-    toast(error.message, 'danger', 6000);
-  } finally {
-    hideProgress();
-    els.scan.disabled = false;
-  }
-});
-
-els.copy.addEventListener('click', async () => {
-  const text = els.output.value;
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (e) {
-    els.output.select();
-    document.execCommand('copy');
-  }
-  buzz();
-  toast('Copied to clipboard.', 'success');
-});
-
-els.saveScan.addEventListener('click', async () => {
-  const address = window.prompt('Label this scan (address or order number):', '');
-  if (address === null) return;
-  await saveScan({
-    address: address.trim(),
-    payload: els.output.value,
-    source: els.resultSource.textContent === 'AI reader' ? 'ai' : 'offline',
-    work_date: new Date().toISOString().slice(0, 10),
   });
-  toast('Scan saved to this device.', 'success');
-  renderHistory();
-});
-
-async function renderHistory() {
-  const scans = (await store.all('equipment_scans'))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 25);
-  els.count.textContent = String(scans.length);
-
-  if (!scans.length) return;
-  els.list.innerHTML = '';
-  for (const scan of scans) {
-    const row = document.createElement('div');
-    row.className = 'list-item';
-    row.innerHTML = `
-      <div class="li-main">
-        <div class="li-title"></div>
-        <div class="li-sub"></div>
-      </div>
-      <button type="button" class="btn btn-sm btn-ghost">Load</button>`;
-    row.querySelector('.li-title').textContent = scan.address || 'Untitled scan';
-    row.querySelector('.li-sub').textContent =
-      `${new Date(scan.created_at).toLocaleString()} · ${scan.source === 'ai' ? 'AI' : 'OCR'}`;
-    row.querySelector('button').addEventListener('click', () => {
-      els.output.value = scan.payload;
-      els.resultSource.textContent = scan.source === 'ai' ? 'AI reader' : 'On-device OCR';
-      els.resultCard.classList.remove('hidden');
-      els.resultCard.scrollIntoView({ behavior: 'smooth' });
-    });
-    els.list.appendChild(row);
-  }
 }
-renderHistory();
-document.addEventListener('mercury:synced', renderHistory);
 
-// The OCR engine itself is precached by the service worker's install step
-// (static/js/sw.js), not warmed opportunistically from here — that used to
-// be page-scoped and only ran if this exact page was visited online long
-// enough for a ~9.7 MB fetch to finish, which meant offline scanning could
-// fail on a device that had simply never had the chance.
+function renderResult(eq) {
+  const isComplete = eq.serial && eq.mac && eq.id_string;
+  const statusHtml = isComplete 
+    ? `<span class="badge badge-green">Complete</span>` 
+    : `<span class="badge badge-amber">Missing Data</span>`;
+
+  const itemHtml = `
+    <div class="list-item">
+      <div class="li-main">
+        <div class="flex-between mb-1">
+          <div class="li-title" style="font-size: 16px;">${eq.type}</div>
+          ${statusHtml}
+        </div>
+        <div class="li-sub" style="font-family: var(--mono); color: var(--text);">
+          <div><span style="color: var(--text-mute);">SN:</span> ${eq.serial || '—'}</div>
+          <div><span style="color: var(--text-mute);">MAC:</span> ${eq.mac || '—'}</div>
+          <div><span style="color: var(--text-mute);">ID:</span> ${eq.id_string || '—'}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const emptyState = resultsContainer.querySelector('.empty');
+  if (emptyState) emptyState.remove();
+  resultsContainer.insertAdjacentHTML('afterbegin', itemHtml);
+}

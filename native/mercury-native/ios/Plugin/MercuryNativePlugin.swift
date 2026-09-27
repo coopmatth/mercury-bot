@@ -3,8 +3,9 @@ import Capacitor
 import Vision
 import Photos
 import UIKit
+import CoreLocation
 
-/// The two things the web app cannot do for itself inside a WKWebView.
+/// The three things the web app cannot do for itself inside a WKWebView.
 ///
 /// `recognizeText` runs Apple's on-device text recognition (the Vision
 /// framework, the same engine behind Live Text / Visual Intelligence). It
@@ -17,13 +18,20 @@ import UIKit
 /// but WKWebView does not implement sharing files and silently ignores
 /// `<a download>`, so in the packaged app the web fallback does nothing at
 /// all. This is the native path that makes "Save all" work there.
+///
+/// `getLocation` returns one GPS fix through iOS location services.
+/// WKWebView's navigator.geolocation is unreliable inside Capacitor and never
+/// prompts without NSLocationWhenInUseUsageDescription in the app's
+/// Info.plist, so the photo timestamp stamp calls this first and only falls
+/// back to the web API.
 @objc(MercuryNativePlugin)
 public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "MercuryNativePlugin"
     public let jsName = "MercuryNative"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "recognizeText", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "savePhotos", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "savePhotos", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getLocation", returnType: CAPPluginReturnPromise)
     ]
 
     // MARK: - OCR
@@ -133,6 +141,64 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    // MARK: - Location
+
+    private var locationManager: CLLocationManager?
+    private var pendingLocationCall: CAPPluginCall?
+
+    /// One-shot GPS fix for the photo timestamp stamp. Resolves
+    /// `{latitude, longitude, accuracy}` or rejects with a human-readable
+    /// reason the web side surfaces in the stamp/toast.
+    @objc func getLocation(_ call: CAPPluginCall) {
+        switch CLLocationManager.authorizationStatus() {
+        case .denied, .restricted:
+            call.reject("Location is turned off for Mercury. Turn it on in " +
+                        "Settings › Mercury › Location (\"While Using\" is enough).")
+            return
+        default:
+            break
+        }
+
+        pendingLocationCall = call
+        let manager = CLLocationManager()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager = manager
+
+        if CLLocationManager.authorizationStatus() == .notDetermined {
+            manager.requestWhenInUseAuthorization()
+            // requestLocation() fires from locationManagerDidChangeAuthorization
+            // once the user answers the prompt.
+        } else {
+            manager.requestLocation()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard let self, let pending = self.pendingLocationCall else { return }
+            self.pendingLocationCall = nil
+            self.locationManager = nil
+            pending.reject("Location timed out waiting for a GPS fix.")
+        }
+    }
+
+    private func finishLocation(with location: CLLocation) {
+        guard let pending = pendingLocationCall else { return }
+        pendingLocationCall = nil
+        locationManager = nil
+        pending.resolve([
+            "latitude": location.coordinate.latitude,
+            "longitude": location.coordinate.longitude,
+            "accuracy": location.horizontalAccuracy,
+        ])
+    }
+
+    private func failLocation(_ message: String) {
+        guard let pending = pendingLocationCall else { return }
+        pendingLocationCall = nil
+        locationManager = nil
+        pending.reject(message)
+    }
+
     // MARK: - Shared
 
     /// Accepts either a bare base64 string or a full `data:image/jpeg;base64,…`
@@ -143,5 +209,38 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
             base64 = String(encoded[encoded.index(after: comma)...])
         }
         return Data(base64Encoded: base64, options: .ignoreUnknownCharacters)
+    }
+}
+
+// MARK: - CLLocationManagerDelegate
+
+extension MercuryNativePlugin: CLLocationManagerDelegate {
+    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            // The prompt was answered with "allow" — now take the fix.
+            if pendingLocationCall != nil {
+                manager.requestLocation()
+            }
+        case .denied, .restricted:
+            if pendingLocationCall != nil {
+                failLocation("Location is turned off for Mercury. Turn it on in " +
+                             "Settings › Mercury › Location (\"While Using\" is enough).")
+            }
+        default:
+            break
+        }
+    }
+
+    public func locationManager(_ manager: CLLocationManager,
+                                didUpdateLocations locations: [CLLocation]) {
+        if let latest = locations.last {
+            finishLocation(with: latest)
+        }
+    }
+
+    public func locationManager(_ manager: CLLocationManager,
+                                didFailWithError error: Error) {
+        failLocation(error.localizedDescription)
     }
 }

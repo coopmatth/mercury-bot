@@ -95,3 +95,25 @@ export async function savePhotos(blobs) {
   const result = await plugin.savePhotos({ images });
   return result?.saved ?? images.length;
 }
+
+/**
+ * One GPS fix through iOS location services (the packaged app only).
+ * WKWebView's navigator.geolocation is unreliable inside Capacitor, so the
+ * photo stamp tries this first. Needs NSLocationWhenInUseUsageDescription
+ * in the app's Info.plist and an app build that includes the getLocation
+ * plugin method.
+ * @returns {Promise<{latitude:number,longitude:number,accuracy:number|null}>}
+ */
+export async function getNativeLocation() {
+  const plugin = nativePlugin();
+  if (!plugin || typeof plugin.getLocation !== 'function') {
+    throw new Error('Location needs the Mercury iOS app with the location update installed.');
+  }
+  const result = await plugin.getLocation({});
+  const latitude = Number(result?.latitude);
+  const longitude = Number(result?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error('The app returned an empty location.');
+  }
+  return { latitude, longitude, accuracy: Number(result.accuracy) || null };
+}

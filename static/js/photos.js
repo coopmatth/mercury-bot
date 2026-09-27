@@ -1,16 +1,17 @@
 /* On-device photo compressor.
  *
- * Nothing leaves the phone: the file is decoded, drawn to a canvas at the
- * target long edge and re-encoded as JPEG. Useful when a job needs photos
- * uploaded over one bar of LTE.
+ * The photo itself never leaves the phone: the file is decoded, drawn to a
+ * canvas at the target long edge, stamped, and re-encoded as JPEG.
  *
- * Every compressed photo is stamped with the capture date/time and the
- * device's current geolocation — the closeout validation requires all
- * photos to be timestamped. The stamp is drawn as a legible bar along the
- * bottom edge of the image itself, so it survives any upload. */
+ * Every compressed photo is stamped with the capture date/time and a street
+ * address — the closeout validation requires all photos to be timestamped.
+ * The address comes from one reverse-geocode lookup per batch (OpenStreetMap
+ * Nominatim), so the coordinates do leave the phone for that lookup; when
+ * offline or the lookup fails the stamp falls back to raw lat/lon. The stamp
+ * is drawn into the image itself, upper-right, so it survives any upload. */
 
 import { toast, buzz } from './app.js';
-import { isNativeApp, savePhotos } from './native.js';
+import { isNativeApp, savePhotos, getNativeLocation } from './native.js';
 
 const els = {
   files: document.getElementById('photo-files'),
@@ -66,57 +67,155 @@ async function compress(file, maxEdge, quality, stamp) {
   };
 }
 
-/* One geolocation lookup per batch — not per photo — so the permission
- * prompt (if any) appears once. Resolves null when geolocation is
- * unavailable, denied, or times out; the date stamp is applied regardless. */
-function getPosition(timeoutMs = 8000) {
-  if (!('geolocation' in navigator)) return Promise.resolve(null);
+/* Location for the stamp. Native (iOS location services) first — reliable
+ * inside the packaged app — then the web geolocation API, then null. The
+ * failure reason is kept so the UI can say why instead of a bare
+ * "unavailable". */
+let lastLocateError = '';
+
+async function locateForStamp() {
+  try {
+    return await getNativeLocation();
+  } catch (error) {
+    // No bridge, old app build, or native failure — fall through to web.
+    console.warn('[photos] native location failed:', error?.message || error);
+  }
+  return getWebPosition();
+}
+
+function getWebPosition(timeoutMs = 20000) {
+  if (!('geolocation' in navigator)) {
+    lastLocateError = 'this browser has no geolocation';
+    return Promise.resolve(null);
+  }
   return new Promise((resolve) => {
     let done = false;
-    const finish = (pos) => {
+    const finish = (position, error) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      resolve(pos);
+      if (error) {
+        lastLocateError =
+          { 1: 'permission denied', 2: 'position unavailable', 3: 'timed out' }[error.code]
+          || 'unknown error';
+      }
+      resolve(position);
     };
-    const timer = setTimeout(() => finish(null), timeoutMs);
+    const timer = setTimeout(() => finish(null, { code: 3 }), timeoutMs);
     navigator.geolocation.getCurrentPosition(
-      (pos) => finish(pos),
-      () => finish(null),
+      (pos) => finish({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      (error) => finish(null, error),
       { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 60000 },
     );
   });
 }
 
+/* Coordinates -> street address for the stamp, one lookup per batch.
+ * OpenStreetMap Nominatim: no key, ~1 request/second limit (fine for one
+ * user). Sends the coordinates to OSM's servers; offline or failure falls
+ * back to raw lat/lon in the stamp. */
+async function reverseGeocode(latitude, longitude, timeoutMs = 8000) {
+  const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2' +
+    `&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) return null;
+    const addr = (await response.json()).address || {};
+    const street = [addr.house_number, addr.road].filter(Boolean).join(' ');
+    const city = addr.city || addr.town || addr.village || addr.hamlet
+      || addr.municipality || '';
+    const state = stateAbbr(addr.state) || addr.state || '';
+    const cityLine = [city, [state, addr.postcode].filter(Boolean).join(' ')]
+      .filter(Boolean).join(' ');
+    if (!street && !cityLine) return null;
+    return { street, cityLine };
+  } catch {
+    return null;
+  }
+}
+
+const US_STATE_ABBR = {
+  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
+  Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', 'District of Columbia': 'DC',
+  Florida: 'FL', Georgia: 'GA', Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL',
+  Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA',
+  Maine: 'ME', Maryland: 'MD', Massachusetts: 'MA', Michigan: 'MI',
+  Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT',
+  Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+  'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC',
+  'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR',
+  Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+  'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT',
+  Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV',
+  Wisconsin: 'WI', Wyoming: 'WY',
+};
+
+function stateAbbr(name) {
+  return US_STATE_ABBR[name] || '';
+}
+
+/* 9/29/26 14:32 — matches the closeout sheet convention. */
 function formatStampDate(date) {
   const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+  return `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(2)} ` +
          `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/* Draws the timestamp + geolocation bar along the bottom edge of the photo.
- * stamp = { takenAt: Date, position: GeolocationPosition | null } */
+/* Draws the timestamp + address stamp in the upper-right corner:
+ *
+ *   9/29/26 14:32
+ *
+ *   400 S 250 W
+ *   Lagrange IN 46761
+ *
+ * stamp = { takenAt: Date, address: {street, cityLine} | null,
+ *           coords: {latitude, longitude} | null } */
 function stampPhoto(ctx, width, height, stamp) {
-  const pad = Math.max(12, Math.round(width * 0.025));
-  const loc = stamp.position
-    ? `${stamp.position.coords.latitude.toFixed(6)}, ${stamp.position.coords.longitude.toFixed(6)}`
-    : 'location unavailable';
-  const text = `${formatStampDate(stamp.takenAt)}  ·  ${loc}`;
+  const lines = [formatStampDate(stamp.takenAt), ''];
+  if (stamp.address && (stamp.address.street || stamp.address.cityLine)) {
+    if (stamp.address.street) lines.push(stamp.address.street);
+    if (stamp.address.cityLine) lines.push(stamp.address.cityLine);
+  } else if (stamp.coords) {
+    lines.push(`${stamp.coords.latitude.toFixed(5)}, ${stamp.coords.longitude.toFixed(5)}`);
+  } else {
+    lines.push('location unavailable');
+  }
 
-  let size = Math.max(15, Math.round(width / 44));
+  const pad = Math.max(12, Math.round(width * 0.025));
+  let size = Math.max(15, Math.round(width / 40));
   const setFont = () => { ctx.font = `600 ${size}px system-ui, -apple-system, sans-serif`; };
   setFont();
-  while (ctx.measureText(text).width > width - pad * 2 && size > 10) {
+  const longest = () => Math.max(...lines.map((line) => ctx.measureText(line).width), 1);
+  while (longest() > width - pad * 2 && size > 10) {
     size -= 2;
     setFont();
   }
 
-  const barH = Math.round(size * 1.9);
+  const lineH = size * 1.35;
+  const boxW = longest() + pad * 1.2;
+  const boxH = lineH * lines.length + pad * 0.9;
+  const boxX = width - pad * 0.6 - boxW;
+  const boxY = pad * 0.6;
+
   ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-  ctx.fillRect(0, height - barH, width, barH);
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, size * 0.35);
+    ctx.fill();
+  } else {
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+  }
+
   ctx.fillStyle = '#ffffff';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, pad, height - barH / 2);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  lines.forEach((line, i) => {
+    if (line) ctx.fillText(line, width - pad * 1.2, boxY + pad * 0.45 + i * lineH);
+  });
+  ctx.textAlign = 'left';
 }
 
 function saveBlob(blob, name) {
@@ -153,11 +252,19 @@ els.button.addEventListener('click', async () => {
 
   try {
     // Capture timestamp comes from the file itself (camera capture time);
-    // geolocation is looked up once for the whole batch.
-    const position = await getPosition();
+    // location is looked up once for the whole batch, then reverse-geocoded
+    // once into a street address for the stamp.
+    const coords = await locateForStamp();
+    let address = null;
+    if (coords) {
+      address = await reverseGeocode(coords.latitude, coords.longitude);
+    } else if (lastLocateError) {
+      toast(`Location unavailable (${lastLocateError}) — stamp will show the date only.`);
+    }
     for (const file of els.files.files) {
       const takenAt = new Date(file.lastModified || Date.now());
-      outputs.push(await compress(file, Number(edge), Number(quality), { takenAt, position }));
+      outputs.push(await compress(file, Number(edge), Number(quality),
+        { takenAt, address, coords }));
     }
   } catch (error) {
     toast(`Could not compress: ${error.message}`, 'danger');

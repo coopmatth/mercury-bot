@@ -81,11 +81,14 @@ jobs:
             "Mercury reads the photos you pick so it can compress them and scan equipment labels."
           set_key NSCameraUsageDescription \
             "Mercury uses the camera to photograph equipment labels and job sites."
+          set_key NSLocationWhenInUseUsageDescription \
+            "Mercury stamps your compressed job photos with the street address where they were taken."
 
           echo "--- resulting usage strings ---"
           /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryAddUsageDescription" "$PLIST"
           /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryUsageDescription" "$PLIST"
           /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :NSLocationWhenInUseUsageDescription" "$PLIST"
 
       - name: Verify the native plugin was compiled in
         run: |

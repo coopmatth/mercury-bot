@@ -4,9 +4,8 @@
  * canvas at the target long edge, stamped, and re-encoded as JPEG.
  *
  * Every compressed photo is stamped with the exact compress date/time and a
- * street address. Compression refuses to run without a real GPS fix (clear
- * error instead of a dateless stamp). The address comes from one
- * reverse-geocode lookup per batch (OpenStreetMap Nominatim), so the
+ * street address when a GPS fix is available; without one the stamp shows
+ * date/time only. The address comes from one reverse-geocode lookup per batch (OpenStreetMap Nominatim), so the
  * coordinates do leave the phone for that lookup; when offline or the lookup
  * fails the stamp falls back to raw lat/lon. The location fix starts when
  * photos are picked so it doesn't block the compress button. The stamp
@@ -259,22 +258,23 @@ els.button.addEventListener('click', async () => {
   outputs = [];
 
   try {
-    // The stamp needs a real location — stop with a clear error instead of
-    // stamping "location unavailable". The lookup started when the photos
-    // were picked, so this rarely waits; 8s past the tap is the hard cap.
+    // Location warm-up started when the photos were picked; 8s past the tap
+    // is the hard cap. If no fix is found, stamp date/time only.
     const coords = await Promise.race([
       pendingLocate || locateForStamp(),
       new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
     ]);
     pendingLocate = null;
-    if (!coords) {
-      throw new Error(lastLocateError
-        ? `No location for the stamp (${lastLocateError}). Check location permission / GPS and try again.`
-        : 'No location for the stamp. Check location permission / GPS and try again.');
+    let address = null;
+    if (coords) {
+      // One reverse-geocode per batch; falls back to raw lat/lon in the
+      // stamp if the address lookup itself fails.
+      address = await reverseGeocode(coords.latitude, coords.longitude);
+    } else {
+      toast(lastLocateError
+        ? `Location unavailable (${lastLocateError}) — stamp will show the date and time only.`
+        : 'Location unavailable — stamp will show the date and time only.');
     }
-    // One reverse-geocode per batch; falls back to raw lat/lon in the stamp
-    // if the address lookup itself fails.
-    const address = await reverseGeocode(coords.latitude, coords.longitude);
     for (const file of els.files.files) {
       // Exact compress time — file.lastModified is import metadata, not
       // capture time, and stamped a seemingly random time.

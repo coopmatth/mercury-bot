@@ -3,11 +3,13 @@
  * The photo itself never leaves the phone: the file is decoded, drawn to a
  * canvas at the target long edge, stamped, and re-encoded as JPEG.
  *
- * Every compressed photo is stamped with the capture date/time and a street
- * address — the closeout validation requires all photos to be timestamped.
- * The address comes from one reverse-geocode lookup per batch (OpenStreetMap
- * Nominatim), so the coordinates do leave the phone for that lookup; when
- * offline or the lookup fails the stamp falls back to raw lat/lon. The stamp
+ * Every compressed photo is stamped with the exact compress date/time and a
+ * street address. Compression refuses to run without a real GPS fix (clear
+ * error instead of a dateless stamp). The address comes from one
+ * reverse-geocode lookup per batch (OpenStreetMap Nominatim), so the
+ * coordinates do leave the phone for that lookup; when offline or the lookup
+ * fails the stamp falls back to raw lat/lon. The location fix starts when
+ * photos are picked so it doesn't block the compress button. The stamp
  * is drawn into the image itself, upper-right, so it survives any upload. */
 
 import { toast, buzz } from './app.js';
@@ -39,6 +41,10 @@ els.files.addEventListener('change', () => {
   els.button.textContent = els.files.files.length
     ? `Compress ${els.files.files.length} ${els.files.files.length === 1 ? 'photo' : 'photos'}`
     : 'Compress photos';
+  // GPS warm-up: start the location fix as soon as photos are picked, so it
+  // is usually ready by the time "Compress" is tapped instead of blocking
+  // the batch on a cold GPS fix (which was adding 10+ seconds).
+  pendingLocate = els.files.files.length ? locateForStamp() : null;
 });
 
 async function compress(file, maxEdge, quality, stamp) {
@@ -70,8 +76,10 @@ async function compress(file, maxEdge, quality, stamp) {
 /* Location for the stamp. Native (iOS location services) first — reliable
  * inside the packaged app — then the web geolocation API, then null. The
  * failure reason is kept so the UI can say why instead of a bare
- * "unavailable". */
+ * "unavailable". Started early (see pendingLocate) so the GPS fix doesn't
+ * block the compress button. */
 let lastLocateError = '';
+let pendingLocate = null;
 
 async function locateForStamp() {
   try {
@@ -114,7 +122,7 @@ function getWebPosition(timeoutMs = 20000) {
  * OpenStreetMap Nominatim: no key, ~1 request/second limit (fine for one
  * user). Sends the coordinates to OSM's servers; offline or failure falls
  * back to raw lat/lon in the stamp. */
-async function reverseGeocode(latitude, longitude, timeoutMs = 8000) {
+async function reverseGeocode(latitude, longitude, timeoutMs = 5000) {
   const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2' +
     `&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
   try {
@@ -251,18 +259,26 @@ els.button.addEventListener('click', async () => {
   outputs = [];
 
   try {
-    // Capture timestamp comes from the file itself (camera capture time);
-    // location is looked up once for the whole batch, then reverse-geocoded
-    // once into a street address for the stamp.
-    const coords = await locateForStamp();
-    let address = null;
-    if (coords) {
-      address = await reverseGeocode(coords.latitude, coords.longitude);
-    } else if (lastLocateError) {
-      toast(`Location unavailable (${lastLocateError}) — stamp will show the date only.`);
+    // The stamp needs a real location — stop with a clear error instead of
+    // stamping "location unavailable". The lookup started when the photos
+    // were picked, so this rarely waits; 8s past the tap is the hard cap.
+    const coords = await Promise.race([
+      pendingLocate || locateForStamp(),
+      new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+    ]);
+    pendingLocate = null;
+    if (!coords) {
+      throw new Error(lastLocateError
+        ? `No location for the stamp (${lastLocateError}). Check location permission / GPS and try again.`
+        : 'No location for the stamp. Check location permission / GPS and try again.');
     }
+    // One reverse-geocode per batch; falls back to raw lat/lon in the stamp
+    // if the address lookup itself fails.
+    const address = await reverseGeocode(coords.latitude, coords.longitude);
     for (const file of els.files.files) {
-      const takenAt = new Date(file.lastModified || Date.now());
+      // Exact compress time — file.lastModified is import metadata, not
+      // capture time, and stamped a seemingly random time.
+      const takenAt = new Date();
       outputs.push(await compress(file, Number(edge), Number(quality),
         { takenAt, address, coords }));
     }

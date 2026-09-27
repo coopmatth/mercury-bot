@@ -162,8 +162,19 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
         pendingLocationCall = call
         let manager = CLLocationManager()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+        // A street-address stamp only needs ~10 m accuracy. Best accuracy
+        // makes iOS wait on a cold high-precision GPS fix (10+ s); ten
+        // meters resolves in a second or two off Wi-Fi/cell.
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
         locationManager = manager
+
+        // Prefer a fresh cached fix (instant) over waiting on the GPS at all.
+        if let cached = manager.location,
+           cached.timestamp.timeIntervalSinceNow > -180,
+           cached.horizontalAccuracy > 0, cached.horizontalAccuracy <= 100 {
+            finishLocation(with: cached)
+            return
+        }
 
         if CLLocationManager.authorizationStatus() == .notDetermined {
             manager.requestWhenInUseAuthorization()
@@ -173,7 +184,7 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
             manager.requestLocation()
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
             guard let self, let pending = self.pendingLocationCall else { return }
             self.pendingLocationCall = nil
             self.locationManager = nil

@@ -7,7 +7,7 @@ from .db import get_db, new_id
 # `rates` table wholesale when the stored version doesn't match, so a
 # `git pull` + restart is all it takes to roll a new card out to every
 # install — including ones already seeded with an older card.
-RATE_CARD_VERSION = "2026-09-27-sub-inhome-2"
+RATE_CARD_VERSION = "2026-09-27-sub-inhome-3"
 
 # The current subcontractor rate card (from sub_inhome.xlsx, 2026-09-27).
 # (name, rate, unit, sort_order). Driveway bore codes D3/D4 are intentionally
@@ -19,10 +19,10 @@ NEW_RATE_CARD: list[tuple[str, float, str, int]] = [
     ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 3),
     ("D11 – UG Temp Drop", 30.00, "ea", 4),
     ("D6 – Pull Through Existing Conduit", 0.50, "ft", 5),
-    ("A1 – Hang Overhead Drop", 0.40, "ft", 6),
-    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 7),
-    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 8),
-    ("D5 – Sidewalk Bore", 25.00, "ea", 9),
+    ("D5 – Sidewalk Bore", 25.00, "ea", 6),
+    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 7),
+    ("A1 – Hang Overhead Drop", 0.40, "ft", 8),
+    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 9),
     ("D9 – Install Flowerpot", 25.00, "ea", 10),
     ("TC1 – Service/Repair Call", 37.50, "ea", 11),
     ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 12),

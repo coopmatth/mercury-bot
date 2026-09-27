@@ -117,11 +117,7 @@
         <div class="li-main">
           <div class="li-title">{{ item }}</div>
           <div class="li-sub">
-            {% if item == 'Aerial Drop Footage' %}
-              {{ summary.task_counts[item]|qty }} ft total · tiered {{ rate_label(item) }}
-            {% else %}
-              {{ summary.task_counts[item]|qty }} {{ 'ft' if item in FOOTAGE_ITEMS else '×' }} {{ rate_label(item) }}
-            {% endif %}
+            {{ summary.task_counts[item]|qty }} {{ 'ft' if item in FOOTAGE_ITEMS else '×' }} {{ rate_label(item) }}
           </div>
         </div>
         <div class="li-amount">{{ summary.task_pay.get(item, 0)|money }}</div>

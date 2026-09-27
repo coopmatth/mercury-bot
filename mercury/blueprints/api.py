@@ -82,9 +82,7 @@ def api_save_rate():
 def api_delete_rate(item_id):
     if not delete_rate_card_item(item_id):
         return jsonify({"ok": False, "error":
-                        "That item can't be deleted — it's either missing or "
-                        "it's the tiered aerial-drop pricing, which every "
-                        "job form depends on."}), 400
+                        "That item can't be deleted — it doesn't exist."}), 400
     return jsonify({"ok": True, "rates": rate_table()})
 
 

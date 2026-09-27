@@ -91,16 +91,54 @@ window.todayISO = todayISO;
 /* ------------------------------------------------------- pay rate engine */
 
 export let RATES = {
-  'Installation': 110.0,
-  'Fusion Splice': 15.0,
-  'Place Nid w/ Riser': 12.5,
-  'Temp drop laid': 20.0,
-  'Trip Fee': 30.0,
-  "Direct bury flat drop (0-300')": 75.0,
-  "bore (0-12')": 25.0,
-  'Conduit Pull Footage': 0.55,
+  'A1 – Hang Overhead Drop': 0.4,
+  'D2 – Direct Bury Flat Drop': 0.6,
+  'D5 – Sidewalk Bore': 25.0,
+  'D9 – Install Flowerpot': 25.0,
+  'D11 – UG Temp Drop': 30.0,
+  'R1 – Residential Installation': 70.0,
+  'D6 – Pull Through Existing Conduit': 0.5,
+  'D7 – Place NID Housing w/ Riser': 20.0,
+  'D8 – Drop Splice (Terminal & NID)': 15.0,
+  'TC1 – Service/Repair Call': 37.5,
+  'RA1 – Replace Hang Overhead Drop': 0.4,
+  'RD1 – Replace Direct Bury Flat Drop': 0.6,
+  'RN1 – Replace NID': 20.0,
+  'RS1 – Drop Splice (Repair)': 15.0,
+  'Chargeback (Tech Error)': -50.0,
+  'D10 – Truck Roll / Trip Fee': 25.0,
+  'W1 – Fixed Wireless Installation': 120.0,
+  'W2 – Fixed Wireless Installation (Fail)': 50.0,
+  'P1 – Post Placement': 30.0,
 };
-export const AERIAL_ITEM = 'Aerial Drop Footage';
+
+/* Pre-card-swap (2026-09-27) names -> current names. Jobs saved under the
+ * old card still carry the old names in their items; resolving them here
+ * keeps every existing job priced at the new rates. Mirrors RATE_ALIASES
+ * in mercury/rates.py — change both in the same commit. */
+export const RATE_ALIASES = {
+  'Installation': 'R1 – Residential Installation',
+  'Fusion Splice': 'D8 – Drop Splice (Terminal & NID)',
+  'Place Nid w/ Riser': 'D7 – Place NID Housing w/ Riser',
+  'Temp drop laid': 'D11 – UG Temp Drop',
+  'Trip Fee': 'D10 – Truck Roll / Trip Fee',
+  "Direct bury flat drop (0-300')": 'D2 – Direct Bury Flat Drop',
+  "bore (0-12')": 'D5 – Sidewalk Bore',
+  'Conduit Pull Footage': 'D6 – Pull Through Existing Conduit',
+  'Aerial Drop Footage': 'A1 – Hang Overhead Drop',
+};
+
+export const FOOTAGE_ITEMS = new Set([
+  'A1 – Hang Overhead Drop',
+  'D2 – Direct Bury Flat Drop',
+  'D6 – Pull Through Existing Conduit',
+  'RA1 – Replace Hang Overhead Drop',
+  'RD1 – Replace Direct Bury Flat Drop',
+]);
+
+export function canonicalName(name) {
+  return RATE_ALIASES[name] || name;
+}
 
 // Load stored rates dynamically from local storage / bootstrap
 async function loadDynamicRates() {
@@ -124,19 +162,10 @@ async function loadDynamicRates() {
   } catch (e) {}
 }
 
-export function aerialPrice(feet) {
-  const ft = Number(feet) || 0;
-  if (ft <= 0) return 0;
-  if (ft <= 300) return 75.0;
-  if (ft <= 600) return 150.0;
-  return Math.round((150.0 + (ft - 600) * 0.5) * 100) / 100;
-}
-
 export function itemPrice(name, qty) {
   const q = Number(qty) || 0;
   if (q <= 0) return 0;
-  if (name === AERIAL_ITEM) return aerialPrice(q);
-  return q * (RATES[name] || 0);
+  return q * (RATES[canonicalName(name)] || 0);
 }
 
 export function jobTotal(items) {
@@ -273,8 +302,8 @@ export function init() {
 
 export { store, sync };
 window.mercury = {
-  store, sync, toast, buzz, money, jobTotal, itemPrice, aerialPrice,
-  saveJob, saveCustomItem, saveScan, removeRow, todayISO, RATES, AERIAL_ITEM,
+  store, sync, toast, buzz, money, jobTotal, itemPrice,
+  saveJob, saveCustomItem, saveScan, removeRow, todayISO, RATES,
 };
 
 init();

@@ -2,7 +2,12 @@
  *
  * Nothing leaves the phone: the file is decoded, drawn to a canvas at the
  * target long edge and re-encoded as JPEG. Useful when a job needs photos
- * uploaded over one bar of LTE. */
+ * uploaded over one bar of LTE.
+ *
+ * Every compressed photo is stamped with the capture date/time and the
+ * device's current geolocation — the closeout validation requires all
+ * photos to be timestamped. The stamp is drawn as a legible bar along the
+ * bottom edge of the image itself, so it survives any upload. */
 
 import { toast, buzz } from './app.js';
 import { isNativeApp, savePhotos } from './native.js';
@@ -35,7 +40,7 @@ els.files.addEventListener('change', () => {
     : 'Compress photos';
 });
 
-async function compress(file, maxEdge, quality) {
+async function compress(file, maxEdge, quality, stamp) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
@@ -48,6 +53,8 @@ async function compress(file, maxEdge, quality) {
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
 
+  if (stamp) stampPhoto(ctx, canvas.width, canvas.height, stamp);
+
   const blob = await new Promise((resolve) =>
     canvas.toBlob(resolve, 'image/jpeg', quality));
   return {
@@ -57,6 +64,59 @@ async function compress(file, maxEdge, quality) {
     size: blob.size,
     dimensions: `${canvas.width}×${canvas.height}`,
   };
+}
+
+/* One geolocation lookup per batch — not per photo — so the permission
+ * prompt (if any) appears once. Resolves null when geolocation is
+ * unavailable, denied, or times out; the date stamp is applied regardless. */
+function getPosition(timeoutMs = 8000) {
+  if (!('geolocation' in navigator)) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (pos) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(pos);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => finish(pos),
+      () => finish(null),
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 60000 },
+    );
+  });
+}
+
+function formatStampDate(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+         `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/* Draws the timestamp + geolocation bar along the bottom edge of the photo.
+ * stamp = { takenAt: Date, position: GeolocationPosition | null } */
+function stampPhoto(ctx, width, height, stamp) {
+  const pad = Math.max(12, Math.round(width * 0.025));
+  const loc = stamp.position
+    ? `${stamp.position.coords.latitude.toFixed(6)}, ${stamp.position.coords.longitude.toFixed(6)}`
+    : 'location unavailable';
+  const text = `${formatStampDate(stamp.takenAt)}  ·  ${loc}`;
+
+  let size = Math.max(15, Math.round(width / 44));
+  const setFont = () => { ctx.font = `600 ${size}px system-ui, -apple-system, sans-serif`; };
+  setFont();
+  while (ctx.measureText(text).width > width - pad * 2 && size > 10) {
+    size -= 2;
+    setFont();
+  }
+
+  const barH = Math.round(size * 1.9);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(0, height - barH, width, barH);
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, pad, height - barH / 2);
 }
 
 function saveBlob(blob, name) {
@@ -92,8 +152,12 @@ els.button.addEventListener('click', async () => {
   outputs = [];
 
   try {
+    // Capture timestamp comes from the file itself (camera capture time);
+    // geolocation is looked up once for the whole batch.
+    const position = await getPosition();
     for (const file of els.files.files) {
-      outputs.push(await compress(file, Number(edge), Number(quality)));
+      const takenAt = new Date(file.lastModified || Date.now());
+      outputs.push(await compress(file, Number(edge), Number(quality), { takenAt, position }));
     }
   } catch (error) {
     toast(`Could not compress: ${error.message}`, 'danger');

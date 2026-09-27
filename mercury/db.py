@@ -107,20 +107,30 @@ CREATE TABLE IF NOT EXISTS rates (
 );
 """
 
-# Seeded into `rates` the first time the table is empty. Kept in step with
-# rates.py's hardcoded fallback list, which these rows now supersede.
+# Seeded into `rates` the first time the table is empty, and wholesale-replaced
+# whenever RATE_CARD_VERSION changes (see init_db). Kept in step with
+# rates.py's NEW_RATE_CARD, which is the source of truth.
+RATE_CARD_VERSION = "2026-09-27-sub-inhome"
 DEFAULT_RATE_CARD = [
-    ("Installation", 110.00, "ea", 0, 1),
-    ("Fusion Splice", 15.00, "ea", 0, 2),
-    ("Place Nid w/ Riser", 12.50, "ea", 0, 3),
-    ("Temp drop laid", 20.00, "ea", 0, 4),
-    ("Trip Fee", 30.00, "ea", 0, 5),
-    ("Direct bury flat drop (0-300')", 75.00, "ea", 0, 6),
-    ("bore (0-12')", 25.00, "ea", 0, 7),
-    ("Conduit Pull Footage", 0.55, "ft", 0, 8),
-    # Tiered, so its flat "rate" is a placeholder — aerial_drop_price() in
-    # rates.py prices it, never this column.
-    ("Aerial Drop Footage", 0.00, "ft", 1, 9),
+    ("A1 – Hang Overhead Drop", 0.40, "ft", 0, 1),
+    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 0, 2),
+    ("D5 – Sidewalk Bore", 25.00, "ea", 0, 3),
+    ("D9 – Install Flowerpot", 25.00, "ea", 0, 4),
+    ("D11 – UG Temp Drop", 30.00, "ea", 0, 5),
+    ("R1 – Residential Installation", 70.00, "ea", 0, 6),
+    ("D6 – Pull Through Existing Conduit", 0.50, "ft", 0, 7),
+    ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 0, 8),
+    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 0, 9),
+    ("TC1 – Service/Repair Call", 37.50, "ea", 0, 10),
+    ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 0, 11),
+    ("RD1 – Replace Direct Bury Flat Drop", 0.60, "ft", 0, 12),
+    ("RN1 – Replace NID", 20.00, "ea", 0, 13),
+    ("RS1 – Drop Splice (Repair)", 15.00, "ea", 0, 14),
+    ("Chargeback (Tech Error)", -50.00, "ea", 0, 15),
+    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 0, 16),
+    ("W1 – Fixed Wireless Installation", 120.00, "ea", 0, 17),
+    ("W2 – Fixed Wireless Installation (Fail)", 50.00, "ea", 0, 18),
+    ("P1 – Post Placement", 30.00, "ea", 0, 19),
 ]
 
 SYNC_TABLES = {
@@ -180,15 +190,24 @@ def init_db() -> None:
     if "dispatched_at" not in columns:
         conn.execute("ALTER TABLE jobs ADD COLUMN dispatched_at TEXT")
 
-    # Seed the rate card once. Without this the `rates` table exists but is
-    # empty, so every lookup falls through to rates.py's hardcoded list and
-    # the rate-editor UI has nothing real to edit.
-    if conn.execute("SELECT COUNT(*) AS n FROM rates").fetchone()["n"] == 0:
+    # Rate card rollout. Fresh databases get the current card; existing ones
+    # get it wholesale-replaced the first time they boot a build carrying a
+    # newer RATE_CARD_VERSION. A row-by-row merge would leave renamed items
+    # half-migrated, and the old names are preserved as aliases in rates.py
+    # so jobs saved under the previous card keep pricing correctly.
+    version_row = conn.execute(
+        "SELECT value FROM meta WHERE key = 'rate_card_version'").fetchone()
+    if not version_row or version_row["value"] != RATE_CARD_VERSION:
+        conn.execute("DELETE FROM rates")
         conn.executemany(
             "INSERT INTO rates (id, name, rate, unit, is_tiered, sort_order) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             [(new_id(), name, rate, unit, tiered, order)
              for name, rate, unit, tiered, order in DEFAULT_RATE_CARD],
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('rate_card_version', ?)",
+            (RATE_CARD_VERSION,),
         )
 
     conn.commit()

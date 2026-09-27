@@ -6,7 +6,7 @@
  * job logged offline appears in the list immediately instead of waiting for
  * a round trip that may be hours away. */
 
-import { itemPrice, AERIAL_ITEM } from './app.js';
+import { itemPrice } from './app.js';
 import * as store from './store.js';
 
 const DAY_MS = 86_400_000;
@@ -86,7 +86,6 @@ export async function weekSummary(startISO, endISO) {
     avgPerJob: jobs.length ? round(jobsTotal / jobs.length) : 0,
     avgPerDay: daysWorked ? round(weekly / daysWorked) : 0,
     perDay: dayLabels(startISO).map((d) => ({ ...d, amount: round(perDayMap[d.date]) })),
-    isAerial: (name) => name === AERIAL_ITEM,
   };
 }
 

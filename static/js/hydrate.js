@@ -9,7 +9,7 @@
  * A page opts in with data-hydrate on <body> and supplies the week via
  * data-week-start / data-week-end. */
 
-import { money, itemPrice, RATES, AERIAL_ITEM } from './app.js';
+import { money, itemPrice, RATES, RATE_ALIASES, FOOTAGE_ITEMS } from './app.js';
 import { weekSummary, niceDate } from './local.js';
 import * as store from './store.js';
 
@@ -54,9 +54,9 @@ function setText(selector, value) {
 }
 
 function rateLabel(name) {
-  if (name === AERIAL_ITEM) return '$75 / $150 / +$0.50 ft';
-  const rate = RATES[name] || 0;
-  const unit = name === 'Conduit Pull Footage' ? ' / ft' : ' ea';
+  const canonical = RATE_ALIASES[name] || name;
+  const rate = RATES[canonical] || 0;
+  const unit = FOOTAGE_ITEMS.has(canonical) ? ' / ft' : ' ea';
   return `${money(rate)}${unit}`;
 }
 
@@ -146,7 +146,7 @@ function renderDashboard(summary, pending) {
     } else {
       if (card) card.classList.remove('hidden');
       tasks.innerHTML = '';
-      for (const name of [...Object.keys(RATES), AERIAL_ITEM]) {
+      for (const name of Object.keys(RATES)) {
         const qty = summary.taskCounts[name];
         if (!qty) continue;
         const row = el(`
@@ -155,9 +155,8 @@ function renderDashboard(summary, pending) {
             <div class="li-amount"></div>
           </div>`);
         row.querySelector('.li-title').textContent = name;
-        row.querySelector('.li-sub').textContent = name === AERIAL_ITEM
-          ? `${qtyText(qty)} ft total · tiered ${rateLabel(name)}`
-          : `${qtyText(qty)} × ${rateLabel(name)}`;
+        row.querySelector('.li-sub').textContent =
+          `${qtyText(qty)} × ${rateLabel(name)}`;
         row.querySelector('.li-amount').textContent = money(summary.taskPay[name] || 0);
         tasks.appendChild(row);
       }

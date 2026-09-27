@@ -1,31 +1,68 @@
 """Pay rates and job-total math with dynamic rate card support."""
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
 from .db import get_db, new_id
 
-AERIAL_ITEM = "Aerial Drop Footage"
-AERIAL_TIER_1_MAX = 300
-AERIAL_TIER_2_MAX = 600
-AERIAL_TIER_3_MIN = 601
-AERIAL_TIER_1_PRICE = 75.00
-AERIAL_TIER_2_PRICE = 150.00
-AERIAL_OVERAGE_RATE = 0.50
+# Bumped whenever the official rate card changes. init_db() replaces the
+# `rates` table wholesale when the stored version doesn't match, so a
+# `git pull` + restart is all it takes to roll a new card out to every
+# install — including ones already seeded with an older card.
+RATE_CARD_VERSION = "2026-09-27-sub-inhome"
 
-# Fallback default items
-DEFAULT_ITEM_LIST = [
-    "Installation",
-    "Fusion Splice",
-    "Place Nid w/ Riser",
-    "Temp drop laid",
-    "Trip Fee",
-    "Direct bury flat drop (0-300')",
-    "bore (0-12')",
-    "Conduit Pull Footage",
-    "Aerial Drop Footage",
+# The current subcontractor rate card (from sub_inhome.xlsx, 2026-09-27).
+# (name, rate, unit, sort_order). Driveway bore codes D3/D4 are intentionally
+# absent — they carry no sub rate.
+NEW_RATE_CARD: list[tuple[str, float, str, int]] = [
+    ("A1 – Hang Overhead Drop", 0.40, "ft", 1),
+    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 2),
+    ("D5 – Sidewalk Bore", 25.00, "ea", 3),
+    ("D9 – Install Flowerpot", 25.00, "ea", 4),
+    ("D11 – UG Temp Drop", 30.00, "ea", 5),
+    ("R1 – Residential Installation", 70.00, "ea", 6),
+    ("D6 – Pull Through Existing Conduit", 0.50, "ft", 7),
+    ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 8),
+    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 9),
+    ("TC1 – Service/Repair Call", 37.50, "ea", 10),
+    ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 11),
+    ("RD1 – Replace Direct Bury Flat Drop", 0.60, "ft", 12),
+    ("RN1 – Replace NID", 20.00, "ea", 13),
+    ("RS1 – Drop Splice (Repair)", 15.00, "ea", 14),
+    ("Chargeback (Tech Error)", -50.00, "ea", 15),
+    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 16),
+    ("W1 – Fixed Wireless Installation", 120.00, "ea", 17),
+    ("W2 – Fixed Wireless Installation (Fail)", 50.00, "ea", 18),
+    ("P1 – Post Placement", 30.00, "ea", 19),
 ]
 
-FOOTAGE_ITEMS = {"Conduit Pull Footage", AERIAL_ITEM}
+# Old card names -> current names. Jobs saved before the 2026-09-27 card
+# swap still carry the old names in their `items` JSON; resolving them here
+# (and in normalize_items) keeps every existing job priced at the new rates
+# instead of silently dropping to $0. "bore (0-12')" maps to D5 at the same
+# $25 it always paid — the driveway bore codes it replaced carry no sub rate.
+RATE_ALIASES: dict[str, str] = {
+    "Installation": "R1 – Residential Installation",
+    "Fusion Splice": "D8 – Drop Splice (Terminal & NID)",
+    "Place Nid w/ Riser": "D7 – Place NID Housing w/ Riser",
+    "Temp drop laid": "D11 – UG Temp Drop",
+    "Trip Fee": "D10 – Truck Roll / Trip Fee",
+    "Direct bury flat drop (0-300')": "D2 – Direct Bury Flat Drop",
+    "bore (0-12')": "D5 – Sidewalk Bore",
+    "Conduit Pull Footage": "D6 – Pull Through Existing Conduit",
+    "Aerial Drop Footage": "A1 – Hang Overhead Drop",
+}
+
+# Fallback default items
+DEFAULT_ITEM_LIST = [name for name, _rate, _unit, _order in NEW_RATE_CARD]
+
+FOOTAGE_ITEMS = {
+    name for name, _rate, unit, _order in NEW_RATE_CARD if unit == "ft"
+}
+
+
+def resolve_name(item_name: str) -> str:
+    """Map a pre-card-swap item name to its current name. Unknown names
+    pass through unchanged."""
+    return RATE_ALIASES.get(item_name, item_name)
 
 
 def get_all_rates() -> list[dict]:
@@ -36,15 +73,9 @@ def get_all_rates() -> list[dict]:
     except Exception:
         pass
     return [
-        {"id": "1", "name": "Installation", "rate": 110.00, "unit": "ea", "is_tiered": 0, "sort_order": 1},
-        {"id": "2", "name": "Fusion Splice", "rate": 15.00, "unit": "ea", "is_tiered": 0, "sort_order": 2},
-        {"id": "3", "name": "Place Nid w/ Riser", "rate": 12.50, "unit": "ea", "is_tiered": 0, "sort_order": 3},
-        {"id": "4", "name": "Temp drop laid", "rate": 20.00, "unit": "ea", "is_tiered": 0, "sort_order": 4},
-        {"id": "5", "name": "Trip Fee", "rate": 30.00, "unit": "ea", "is_tiered": 0, "sort_order": 5},
-        {"id": "6", "name": "Direct bury flat drop (0-300')", "rate": 75.00, "unit": "ea", "is_tiered": 0, "sort_order": 6},
-        {"id": "7", "name": "bore (0-12')", "rate": 25.00, "unit": "ea", "is_tiered": 0, "sort_order": 7},
-        {"id": "8", "name": "Conduit Pull Footage", "rate": 0.55, "unit": "ft", "is_tiered": 0, "sort_order": 8},
-        {"id": "9", "name": "Aerial Drop Footage", "rate": 0.00, "unit": "ft", "is_tiered": 1, "sort_order": 9},
+        {"id": str(i), "name": name, "rate": rate, "unit": unit,
+         "is_tiered": 0, "sort_order": order}
+        for i, (name, rate, unit, order) in enumerate(NEW_RATE_CARD, start=1)
     ]
 
 
@@ -83,31 +114,11 @@ class _PayRatesProxy(dict):
 PAY_RATES = _PayRatesProxy()
 
 
-def aerial_drop_price(feet: float) -> float:
-    if feet <= 0:
-        return 0.0
-    if feet <= AERIAL_TIER_1_MAX:
-        return AERIAL_TIER_1_PRICE
-    if feet <= AERIAL_TIER_2_MAX:
-        return AERIAL_TIER_2_PRICE
-    return round(AERIAL_TIER_2_PRICE + (feet - AERIAL_TIER_2_MAX) * AERIAL_OVERAGE_RATE, 2)
-
-
-def aerial_tier(feet: float) -> str:
-    if feet <= AERIAL_TIER_1_MAX:
-        return "0-300"
-    if feet <= AERIAL_TIER_2_MAX:
-        return "301-600"
-    return "601+"
-
-
 def item_price(item_name: str, qty: float) -> float:
     if not item_name or qty is None or qty <= 0:
         return 0.0
-    if item_name == AERIAL_ITEM:
-        return aerial_drop_price(qty)
     pay_rates = get_pay_rates()
-    return round(qty * pay_rates.get(item_name, 0.0), 2)
+    return round(qty * pay_rates.get(resolve_name(item_name), 0.0), 2)
 
 
 def calculate_job_total(item_quantities: dict) -> float:
@@ -115,10 +126,9 @@ def calculate_job_total(item_quantities: dict) -> float:
 
 
 def rate_label(item_name: str) -> str:
-    if item_name == AERIAL_ITEM:
-        return "$75 / $150 / +$0.50 ft"
+    name = resolve_name(item_name)
     rates = {r["name"]: r for r in get_all_rates()}
-    info = rates.get(item_name)
+    info = rates.get(name)
     if not info:
         return "$0.00 ea"
     unit = " / ft" if info["unit"] == "ft" else " ea"
@@ -131,7 +141,7 @@ def rate_table() -> list[dict]:
             "id": r["id"],
             "item": r["name"],
             "rate": r["rate"],
-            "tiered": bool(r["is_tiered"]),
+            "tiered": False,
             "unit": r["unit"],
             "label": rate_label(r["name"]),
         }
@@ -155,14 +165,10 @@ def save_rate_card_item(name: str, rate: float, unit: str = "ea", item_id: str =
 
 
 def delete_rate_card_item(item_id: str) -> bool:
-    """Delete a rate card row. Refuses the tiered aerial row: removing it
-    would drop "Aerial Drop Footage" out of ITEM_LIST, and every future job
-    save would then silently discard any aerial footage it was given."""
+    """Delete a rate card row. Returns False when the row doesn't exist."""
     conn = get_db()
-    row = conn.execute("SELECT is_tiered FROM rates WHERE id = ?", (item_id,)).fetchone()
+    row = conn.execute("SELECT id FROM rates WHERE id = ?", (item_id,)).fetchone()
     if row is None:
-        return False
-    if row["is_tiered"]:
         return False
     with conn:
         conn.execute("DELETE FROM rates WHERE id = ?", (item_id,))

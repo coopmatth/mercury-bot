@@ -55,14 +55,10 @@
         <div class="li-title">{{ rate.item }}</div>
         <div class="text-sm text-dim">{{ rate.label }}</div>
       </div>
-      {% if not rate.tiered %}
       <div class="flex">
         <button class="btn btn-sm btn-ghost edit-rate-btn" data-id="{{ rate.id }}" data-name="{{ rate.item }}" data-rate="{{ rate.rate }}" data-unit="{{ rate.unit }}">Edit</button>
         <button class="btn btn-sm btn-danger del-rate-btn" data-id="{{ rate.id }}" data-name="{{ rate.item }}">✕</button>
       </div>
-      {% else %}
-      <span class="badge badge-soft">Tiered</span>
-      {% endif %}
     </div>
     {% endfor %}
   </div>

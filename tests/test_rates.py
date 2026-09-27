@@ -14,7 +14,7 @@ def test_card_has_19_items_and_nothing_tiered():
 
 
 def test_rate_card_version_is_stamped():
-    assert RATE_CARD_VERSION == "2026-09-27-sub-inhome"
+    assert RATE_CARD_VERSION == "2026-09-27-sub-inhome-2"
 
 
 def test_flat_rates_multiply():

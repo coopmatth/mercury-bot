@@ -92,25 +92,25 @@ window.todayISO = todayISO;
 /* ------------------------------------------------------- pay rate engine */
 
 export let RATES = {
+  'R1 – Residential Installation': 70.0,
+  'D8 – Drop Splice (Terminal & NID)': 15.0,
+  'D7 – Place NID Housing w/ Riser': 20.0,
+  'D11 – UG Temp Drop': 30.0,
+  'D6 – Pull Through Existing Conduit': 0.5,
   'A1 – Hang Overhead Drop': 0.4,
   'D2 – Direct Bury Flat Drop': 0.6,
+  'D10 – Truck Roll / Trip Fee': 25.0,
   'D5 – Sidewalk Bore': 25.0,
   'D9 – Install Flowerpot': 25.0,
-  'D11 – UG Temp Drop': 30.0,
-  'R1 – Residential Installation': 70.0,
-  'D6 – Pull Through Existing Conduit': 0.5,
-  'D7 – Place NID Housing w/ Riser': 20.0,
-  'D8 – Drop Splice (Terminal & NID)': 15.0,
   'TC1 – Service/Repair Call': 37.5,
   'RA1 – Replace Hang Overhead Drop': 0.4,
   'RD1 – Replace Direct Bury Flat Drop': 0.6,
   'RN1 – Replace NID': 20.0,
   'RS1 – Drop Splice (Repair)': 15.0,
-  'Chargeback (Tech Error)': -50.0,
-  'D10 – Truck Roll / Trip Fee': 25.0,
   'W1 – Fixed Wireless Installation': 120.0,
   'W2 – Fixed Wireless Installation (Fail)': 50.0,
   'P1 – Post Placement': 30.0,
+  'Chargeback (Tech Error)': -50.0,
 };
 
 /* Pre-card-swap (2026-09-27) names -> current names. Jobs saved under the

@@ -7,31 +7,32 @@ from .db import get_db, new_id
 # `rates` table wholesale when the stored version doesn't match, so a
 # `git pull` + restart is all it takes to roll a new card out to every
 # install — including ones already seeded with an older card.
-RATE_CARD_VERSION = "2026-09-27-sub-inhome"
+RATE_CARD_VERSION = "2026-09-27-sub-inhome-2"
 
 # The current subcontractor rate card (from sub_inhome.xlsx, 2026-09-27).
 # (name, rate, unit, sort_order). Driveway bore codes D3/D4 are intentionally
-# absent — they carry no sub rate.
+# absent — they carry no sub rate. sort_order is the display order: the five
+# most-used items first, then the rest of the card.
 NEW_RATE_CARD: list[tuple[str, float, str, int]] = [
-    ("A1 – Hang Overhead Drop", 0.40, "ft", 1),
-    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 2),
-    ("D5 – Sidewalk Bore", 25.00, "ea", 3),
-    ("D9 – Install Flowerpot", 25.00, "ea", 4),
-    ("D11 – UG Temp Drop", 30.00, "ea", 5),
-    ("R1 – Residential Installation", 70.00, "ea", 6),
-    ("D6 – Pull Through Existing Conduit", 0.50, "ft", 7),
-    ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 8),
-    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 9),
-    ("TC1 – Service/Repair Call", 37.50, "ea", 10),
-    ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 11),
-    ("RD1 – Replace Direct Bury Flat Drop", 0.60, "ft", 12),
-    ("RN1 – Replace NID", 20.00, "ea", 13),
-    ("RS1 – Drop Splice (Repair)", 15.00, "ea", 14),
-    ("Chargeback (Tech Error)", -50.00, "ea", 15),
-    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 16),
-    ("W1 – Fixed Wireless Installation", 120.00, "ea", 17),
-    ("W2 – Fixed Wireless Installation (Fail)", 50.00, "ea", 18),
-    ("P1 – Post Placement", 30.00, "ea", 19),
+    ("R1 – Residential Installation", 70.00, "ea", 1),
+    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 2),
+    ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 3),
+    ("D11 – UG Temp Drop", 30.00, "ea", 4),
+    ("D6 – Pull Through Existing Conduit", 0.50, "ft", 5),
+    ("A1 – Hang Overhead Drop", 0.40, "ft", 6),
+    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 7),
+    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 8),
+    ("D5 – Sidewalk Bore", 25.00, "ea", 9),
+    ("D9 – Install Flowerpot", 25.00, "ea", 10),
+    ("TC1 – Service/Repair Call", 37.50, "ea", 11),
+    ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 12),
+    ("RD1 – Replace Direct Bury Flat Drop", 0.60, "ft", 13),
+    ("RN1 – Replace NID", 20.00, "ea", 14),
+    ("RS1 – Drop Splice (Repair)", 15.00, "ea", 15),
+    ("W1 – Fixed Wireless Installation", 120.00, "ea", 16),
+    ("W2 – Fixed Wireless Installation (Fail)", 50.00, "ea", 17),
+    ("P1 – Post Placement", 30.00, "ea", 18),
+    ("Chargeback (Tech Error)", -50.00, "ea", 19),
 ]
 
 # Old card names -> current names. Jobs saved before the 2026-09-27 card

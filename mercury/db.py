@@ -110,27 +110,27 @@ CREATE TABLE IF NOT EXISTS rates (
 # Seeded into `rates` the first time the table is empty, and wholesale-replaced
 # whenever RATE_CARD_VERSION changes (see init_db). Kept in step with
 # rates.py's NEW_RATE_CARD, which is the source of truth.
-RATE_CARD_VERSION = "2026-09-27-sub-inhome"
+RATE_CARD_VERSION = "2026-09-27-sub-inhome-2"
 DEFAULT_RATE_CARD = [
-    ("A1 – Hang Overhead Drop", 0.40, "ft", 0, 1),
-    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 0, 2),
-    ("D5 – Sidewalk Bore", 25.00, "ea", 0, 3),
-    ("D9 – Install Flowerpot", 25.00, "ea", 0, 4),
-    ("D11 – UG Temp Drop", 30.00, "ea", 0, 5),
-    ("R1 – Residential Installation", 70.00, "ea", 0, 6),
-    ("D6 – Pull Through Existing Conduit", 0.50, "ft", 0, 7),
-    ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 0, 8),
-    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 0, 9),
-    ("TC1 – Service/Repair Call", 37.50, "ea", 0, 10),
-    ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 0, 11),
-    ("RD1 – Replace Direct Bury Flat Drop", 0.60, "ft", 0, 12),
-    ("RN1 – Replace NID", 20.00, "ea", 0, 13),
-    ("RS1 – Drop Splice (Repair)", 15.00, "ea", 0, 14),
-    ("Chargeback (Tech Error)", -50.00, "ea", 0, 15),
-    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 0, 16),
-    ("W1 – Fixed Wireless Installation", 120.00, "ea", 0, 17),
-    ("W2 – Fixed Wireless Installation (Fail)", 50.00, "ea", 0, 18),
-    ("P1 – Post Placement", 30.00, "ea", 0, 19),
+    ("R1 – Residential Installation", 70.00, "ea", 0, 1),
+    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 0, 2),
+    ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 0, 3),
+    ("D11 – UG Temp Drop", 30.00, "ea", 0, 4),
+    ("D6 – Pull Through Existing Conduit", 0.50, "ft", 0, 5),
+    ("A1 – Hang Overhead Drop", 0.40, "ft", 0, 6),
+    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 0, 7),
+    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 0, 8),
+    ("D5 – Sidewalk Bore", 25.00, "ea", 0, 9),
+    ("D9 – Install Flowerpot", 25.00, "ea", 0, 10),
+    ("TC1 – Service/Repair Call", 37.50, "ea", 0, 11),
+    ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 0, 12),
+    ("RD1 – Replace Direct Bury Flat Drop", 0.60, "ft", 0, 13),
+    ("RN1 – Replace NID", 20.00, "ea", 0, 14),
+    ("RS1 – Drop Splice (Repair)", 15.00, "ea", 0, 15),
+    ("W1 – Fixed Wireless Installation", 120.00, "ea", 0, 16),
+    ("W2 – Fixed Wireless Installation (Fail)", 50.00, "ea", 0, 17),
+    ("P1 – Post Placement", 30.00, "ea", 0, 18),
+    ("Chargeback (Tech Error)", -50.00, "ea", 0, 19),
 ]
 
 SYNC_TABLES = {

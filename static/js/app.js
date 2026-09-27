@@ -2,6 +2,7 @@
 
 import * as store from './store.js';
 import sync from './sync.js';
+import { isNativeApp } from './native.js';
 
 /* --------------------------------------------------------------- toasts */
 
@@ -366,31 +367,36 @@ document.addEventListener('click', async (event) => {
 });
 
 window.addEventListener('popstate', () => window.location.reload());
-/* ------------------------------------------- native iOS photo download bypass */
+/* ------------------------------------------- native iOS download bypass */
 document.addEventListener('click', async (event) => {
-  // Find if the clicked element is a download link
+  // WKWebView ignores <a download>, so inside the packaged app fetch the
+  // file and hand it to the iOS share sheet instead. In a real browser the
+  // download attribute works on its own, so leave those clicks alone.
+  // (This used to assume every download was a photo and named it
+  // "compressed_image.jpg" — which is why the spreadsheet buttons handed
+  // you a photo file. It now keeps the real file and filename.)
   const downloadLink = event.target.closest('a[download]');
-  if (!downloadLink) return;
+  if (!downloadLink || !isNativeApp()) return;
 
   // Check if the device supports the native share menu (like iOS)
   if (navigator.share) {
     event.preventDefault(); // Stop the default webview download block
-    
+
     try {
-      // Fetch the image data from the link
       const response = await fetch(downloadLink.href);
       const blob = await response.blob();
-      
-      // Create a file object for the Share Sheet
-      const filename = downloadLink.download || 'compressed_image.jpg';
-      const file = new File([blob], filename, { type: blob.type });
+
+      // The links carry a bare `download` attribute, so prefer the
+      // server's Content-Disposition filename (e.g. the .xlsx name).
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const serverName = /filename="([^"]+)"/.exec(disposition)?.[1];
+      const filename = serverName || downloadLink.download || 'download';
+      const file = new File([blob], filename,
+        { type: blob.type || 'application/octet-stream' });
 
       // Verify the system can share this file type
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Save Photo'
-        });
+        await navigator.share({ files: [file], title: filename });
       } else {
         // Fallback if file sharing is unsupported
         window.location.href = downloadLink.href;

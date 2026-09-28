@@ -97,6 +97,25 @@ export async function savePhotos(blobs) {
 }
 
 /**
+ * Opens a downloaded file (spreadsheet, invoice PDF, backup) in the iOS
+ * "Open In…" menu, which lists every installed app that handles the file
+ * type — e.g. Excel for .xlsx. The packaged app only.
+ * @param {Blob} blob
+ * @param {string} filename
+ * @returns {Promise<boolean>} true when the native menu was presented
+ */
+export async function openFile(blob, filename) {
+  const plugin = nativePlugin();
+  if (!plugin || typeof plugin.openFile !== 'function') return false;
+  try {
+    await plugin.openFile({ filename, data: await toBase64(blob) });
+    return true;
+  } catch (error) {
+    console.warn('[native] openFile failed:', error?.message || error);
+    return false;
+  }
+}
+/**
  * One GPS fix through iOS location services (the packaged app only).
  * WKWebView's navigator.geolocation is unreliable inside Capacitor, so the
  * photo stamp tries this first. Needs NSLocationWhenInUseUsageDescription

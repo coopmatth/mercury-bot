@@ -16,4 +16,4 @@ const unavailable = () => {
   );
 };
 
-module.exports = { MercuryNative: { recognizeText: unavailable, savePhotos: unavailable, getLocation: unavailable } };
+module.exports = { MercuryNative: { recognizeText: unavailable, savePhotos: unavailable, getLocation: unavailable, openFile: unavailable } };

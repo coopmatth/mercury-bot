@@ -31,7 +31,8 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "recognizeText", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "savePhotos", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getLocation", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getLocation", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openFile", returnType: CAPPluginReturnPromise)
     ]
 
     // MARK: - OCR
@@ -145,6 +146,49 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var locationManager: CLLocationManager?
     private var pendingLocationCall: CAPPluginCall?
+    private var documentController: UIDocumentInteractionController?
+
+    /// Presents the iOS "Open In…" menu for a downloaded file (spreadsheet,
+    /// invoice PDF, backup) so it can be opened directly in Excel etc.
+    /// WKWebView can't do `<a download>`, and the share sheet buries the
+    /// target app — this lists every app that handles the file type.
+    @objc func openFile(_ call: CAPPluginCall) {
+        guard let filename = call.getString("filename"), !filename.isEmpty else {
+            call.reject("The download had no filename.")
+            return
+        }
+        guard let data = Self.decodeData(call.getString("data") ?? "") else {
+            call.reject("The download could not be read.")
+            return
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(filename)
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            call.reject("Could not stage the download: \(error.localizedDescription)")
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let viewController = self.bridge?.viewController else {
+                call.reject("The app window isn't ready.")
+                return
+            }
+            let controller = UIDocumentInteractionController(url: url)
+            controller.delegate = self
+            self.documentController = controller // strong ref while presented
+            if !controller.presentOpenInMenu(
+                from: viewController.view.bounds,
+                in: viewController.view,
+                animated: true
+            ) {
+                // No app claims the type — fall back to a preview, which
+                // still offers its own "Open In".
+                controller.presentPreview(animated: true)
+            }
+            call.resolve()
+        }
+    }
 
     /// One-shot GPS fix for the photo timestamp stamp. Resolves
     /// `{latitude, longitude, accuracy}` or rejects with a human-readable
@@ -220,6 +264,16 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
             base64 = String(encoded[encoded.index(after: comma)...])
         }
         return Data(base64Encoded: base64, options: .ignoreUnknownCharacters)
+    }
+}
+
+// MARK: - UIDocumentInteractionControllerDelegate
+
+extension MercuryNativePlugin: UIDocumentInteractionControllerDelegate {
+    public func documentInteractionControllerViewControllerForPreview(
+        _ controller: UIDocumentInteractionController
+    ) -> UIViewController {
+        bridge?.viewController ?? UIViewController()
     }
 }
 

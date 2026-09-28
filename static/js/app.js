@@ -2,7 +2,7 @@
 
 import * as store from './store.js';
 import sync from './sync.js';
-import { isNativeApp } from './native.js';
+import { isNativeApp, openFile } from './native.js';
 
 /* --------------------------------------------------------------- toasts */
 
@@ -370,39 +370,43 @@ window.addEventListener('popstate', () => window.location.reload());
 /* ------------------------------------------- native iOS download bypass */
 document.addEventListener('click', async (event) => {
   // WKWebView ignores <a download>, so inside the packaged app fetch the
-  // file and hand it to the iOS share sheet instead. In a real browser the
-  // download attribute works on its own, so leave those clicks alone.
+  // file and hand it to iOS instead. In a real browser the download
+  // attribute works on its own, so leave those clicks alone.
   // (This used to assume every download was a photo and named it
   // "compressed_image.jpg" — which is why the spreadsheet buttons handed
   // you a photo file. It now keeps the real file and filename.)
   const downloadLink = event.target.closest('a[download]');
   if (!downloadLink || !isNativeApp()) return;
 
-  // Check if the device supports the native share menu (like iOS)
-  if (navigator.share) {
-    event.preventDefault(); // Stop the default webview download block
+  event.preventDefault(); // Stop the default webview download block
 
-    try {
-      const response = await fetch(downloadLink.href);
-      const blob = await response.blob();
+  try {
+    const response = await fetch(downloadLink.href);
+    const blob = await response.blob();
 
-      // The links carry a bare `download` attribute, so prefer the
-      // server's Content-Disposition filename (e.g. the .xlsx name).
-      const disposition = response.headers.get('Content-Disposition') || '';
-      const serverName = /filename="([^"]+)"/.exec(disposition)?.[1];
-      const filename = serverName || downloadLink.download || 'download';
+    // The links carry a bare `download` attribute, so prefer the
+    // server's Content-Disposition filename (e.g. the .xlsx name).
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const serverName = /filename="([^"]+)"/.exec(disposition)?.[1];
+    const filename = serverName || downloadLink.download || 'download';
+
+    // Prefer the native "Open In…" menu — it lists every app that handles
+    // the file type (Excel for .xlsx), which the share sheet buries.
+    if (await openFile(blob, filename)) return;
+
+    // Fallback: the iOS share sheet.
+    if (navigator.share) {
       const file = new File([blob], filename,
         { type: blob.type || 'application/octet-stream' });
-
-      // Verify the system can share this file type
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: filename });
       } else {
-        // Fallback if file sharing is unsupported
         window.location.href = downloadLink.href;
       }
-    } catch (err) {
-      console.error("Failed to open share sheet:", err);
+    } else {
+      window.location.href = downloadLink.href;
     }
+  } catch (err) {
+    console.error('Failed to open download:', err);
   }
 });

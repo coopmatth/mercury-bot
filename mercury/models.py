@@ -6,8 +6,8 @@ from datetime import date, datetime, timedelta
 
 from .config import Config
 from .db import get_db, new_id, next_seq, row_to_dict, utcnow
-from .rates import (ITEM_LIST, PAY_RATES, calculate_job_total, item_price,
-                    resolve_name)
+from .rates import (AERIAL_ITEM, ITEM_LIST, PAY_RATES, aerial_tier,
+                    calculate_job_total, item_price, resolve_name)
 
 DATE_FMT = "%Y-%m-%d"
 
@@ -341,24 +341,53 @@ def week_summary(start: date, end: date) -> dict:
     }
 
 def invoice_lines(start: date, end: date, extra_items: list[dict] | None = None) -> tuple[list[dict], float]:
+    from .rates import (AERIAL_TIER_1_PRICE, AERIAL_TIER_2_PRICE,
+                        aerial_drop_price)
+
     counts: dict[str, float] = {}
+    aerial: dict[str, list[float]] = {"0-300": [], "301-600": [], "601+": []}
 
     for job in list_jobs(start, end):
         for name, qty in job["items"].items():
             canonical = resolve_name(name)
-            counts[canonical] = counts.get(canonical, 0) + qty
+            if canonical == AERIAL_ITEM:
+                aerial[aerial_tier(qty)].append(qty)
+            else:
+                counts[canonical] = counts.get(canonical, 0) + qty
 
     lines: list[dict] = []
     for name in ITEM_LIST:
-        qty = counts.get(name, 0)
-        if qty <= 0:
+        if name == AERIAL_ITEM or counts.get(name, 0) <= 0:
             continue
+        qty = counts[name]
         rate = PAY_RATES[name]
         lines.append({
             "description": name,
             "qty": qty,
             "rate": rate,
             "amount": round(qty * rate, 2),
+        })
+
+    for tier, label, price in (
+        ("0-300", "Aerial Drop (0-300')", AERIAL_TIER_1_PRICE),
+        ("301-600", "Aerial Drop (301-600')", AERIAL_TIER_2_PRICE),
+    ):
+        drops = aerial[tier]
+        if drops:
+            lines.append({
+                "description": f"{label} — {int(sum(drops))} ft total",
+                "qty": len(drops),
+                "rate": price,
+                "amount": round(len(drops) * price, 2),
+            })
+
+    for feet in aerial["601+"]:
+        price = aerial_drop_price(feet)
+        lines.append({
+            "description": f"Aerial Drop (601'+) — {int(feet)} ft",
+            "qty": 1,
+            "rate": price,
+            "amount": round(price, 2),
         })
 
     for item in (extra_items or []):

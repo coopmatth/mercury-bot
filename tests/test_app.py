@@ -81,26 +81,31 @@ def test_work_outside_the_week_is_excluded(ctx):
     assert week_summary(start, end)["job_count"] == 0
 
 
-def test_invoice_bills_per_foot_items_on_single_lines(ctx):
+def test_invoice_groups_aerial_by_tier_and_bills_long_drops_singly(ctx):
     start, end = week_bounds()
     for feet in (200, 250, 400, 780):
         save_job({"work_date": start.isoformat(),
                   "items": {"A1 – Hang Overhead Drop": feet}})
 
     lines, total = invoice_lines(start, end)
-    assert len(lines) == 1
-    line = lines[0]
-    assert line["description"] == "A1 – Hang Overhead Drop"
-    assert line["qty"] == pytest.approx(1630)
-    assert line["rate"] == pytest.approx(0.4)
-    assert line["amount"] == pytest.approx(652.0)
-    assert total == pytest.approx(652.0)
+    by_desc = {line["description"]: line for line in lines}
+
+    tier1 = next(v for k, v in by_desc.items() if k.startswith("Aerial Drop (0-300')"))
+    assert tier1["qty"] == 2 and tier1["amount"] == pytest.approx(150.0)
+
+    tier2 = next(v for k, v in by_desc.items() if k.startswith("Aerial Drop (301-600')"))
+    assert tier2["qty"] == 1 and tier2["amount"] == pytest.approx(150.0)
+
+    # 780 ft = 150 + (780 - 600) * 0.50 = 240.00, on its own line.
+    long_drop = next(v for k, v in by_desc.items() if "601'+" in k)
+    assert long_drop["amount"] == pytest.approx(240.0)
+    assert total == pytest.approx(540.0)
 
 
 def test_remc_items_stay_off_the_mercury_invoice(ctx):
     from mercury.invoicing import build_mercury_invoice, build_remc_invoice
     start, end = week_bounds()
-    save_job({"work_date": start.isoformat(), "items": {"R1 – Residential Installation": 1}})   # 70
+    save_job({"work_date": start.isoformat(), "items": {"R1 – Residential Installation": 1}})   # 110
     save_custom_item({"work_date": start.isoformat(), "name": "Mercury extra",
                       "qty": 1, "rate": 40, "bill_to": "mercury"})
     save_custom_item({"work_date": start.isoformat(), "name": "REMC repair",
@@ -108,7 +113,7 @@ def test_remc_items_stay_off_the_mercury_invoice(ctx):
 
     mercury = build_mercury_invoice(start, end)
     remc = build_remc_invoice(start=start, end=end)
-    assert mercury["total"] == pytest.approx(110.0)   # 70 + 40, no REMC line
+    assert mercury["total"] == pytest.approx(150.0)   # 110 + 40, no REMC line
     assert remc["total"] == pytest.approx(180.0)
 
 
@@ -168,11 +173,11 @@ def test_reports_defaults_to_the_current_week(client, ctx):
 
     default_body = client.get("/reports").data.decode()
     assert current_start.strftime("%b %d") in default_body
-    assert "$630.00" in default_body          # the in-progress week's total
+    assert "$990.00" in default_body          # the in-progress week's total
 
     picked_body = client.get(f"/reports?week={closed_start.isoformat()}").data.decode()
     assert closed_start.strftime("%b %d") in picked_body
-    assert "$70.00" in picked_body            # the closed week's total
+    assert "$110.00" in picked_body            # the closed week's total
     assert "$990.00" not in picked_body
 
 
@@ -218,7 +223,7 @@ def test_deleting_a_job_removes_it_from_the_week(client, ctx):
 def test_quote_prices_without_saving(client, ctx):
     start, end = week_bounds()
     result = client.post("/api/quote", json={"items": {"R1 – Residential Installation": 2}}).get_json()
-    assert result["total"] == pytest.approx(140.0)
+    assert result["total"] == pytest.approx(220.0)
     assert week_summary(start, end)["job_count"] == 0
 
 

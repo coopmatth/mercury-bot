@@ -9,7 +9,7 @@
  * A page opts in with data-hydrate on <body> and supplies the week via
  * data-week-start / data-week-end. */
 
-import { money, itemPrice, RATES, RATE_ALIASES, FOOTAGE_ITEMS } from './app.js';
+import { money, itemPrice, RATES, RATE_ALIASES, FOOTAGE_ITEMS, AERIAL_ITEM } from './app.js';
 import { weekSummary, niceDate } from './local.js';
 import * as store from './store.js';
 
@@ -55,6 +55,7 @@ function setText(selector, value) {
 
 function rateLabel(name) {
   const canonical = RATE_ALIASES[name] || name;
+  if (canonical === AERIAL_ITEM) return '$75 / $150 / +$0.50 ft';
   const rate = RATES[canonical] || 0;
   const unit = FOOTAGE_ITEMS.has(canonical) ? ' / ft' : ' ea';
   return `${money(rate)}${unit}`;

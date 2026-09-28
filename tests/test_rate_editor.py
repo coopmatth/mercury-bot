@@ -8,17 +8,13 @@ import pytest
 def test_rates_table_is_seeded_on_init(ctx):
     from mercury.rates import rate_table
     rows = rate_table()
-    assert len(rows) == 19
+    assert len(rows) == 9
     assert {r["item"] for r in rows} == {
-        "A1 – Hang Overhead Drop", "D2 – Direct Bury Flat Drop",
-        "D5 – Sidewalk Bore", "D9 – Install Flowerpot", "D11 – UG Temp Drop",
-        "R1 – Residential Installation", "D6 – Pull Through Existing Conduit",
-        "D7 – Place NID Housing w/ Riser", "D8 – Drop Splice (Terminal & NID)",
-        "TC1 – Service/Repair Call", "RA1 – Replace Hang Overhead Drop",
-        "RD1 – Replace Direct Bury Flat Drop", "RN1 – Replace NID",
-        "RS1 – Drop Splice (Repair)", "Chargeback (Tech Error)",
-        "D10 – Truck Roll / Trip Fee", "W1 – Fixed Wireless Installation",
-        "W2 – Fixed Wireless Installation (Fail)", "P1 – Post Placement",
+        "R1 – Residential Installation", "D8 – Drop Splice (Terminal & NID)",
+        "D7 – Place NID Housing w/ Riser", "D11 – UG Temp Drop",
+        "D6 – Pull Through Existing Conduit", "D5 – Sidewalk Bore",
+        "D10 – Truck Roll / Trip Fee", "A1 – Hang Overhead Drop",
+        "D2 – Direct Bury Flat Drop",
     }
 
 
@@ -57,13 +53,13 @@ def test_deleting_a_rate_removes_it_from_the_item_list(client, ctx):
     from mercury.rates import get_item_list
 
     rates = client.get("/api/rates").get_json()["rates"]
-    post = next(r for r in rates if r["item"] == "P1 – Post Placement")
+    bore = next(r for r in rates if r["item"] == "D5 – Sidewalk Bore")
 
-    response = client.delete(f"/api/rates/{post['id']}")
+    response = client.delete(f"/api/rates/{bore['id']}")
     assert response.status_code == 200
     assert response.get_json()["ok"] is True
 
-    assert "P1 – Post Placement" not in get_item_list()
+    assert "D5 – Sidewalk Bore" not in get_item_list()
 
 
 def test_deleting_an_ordinary_rate_succeeds(client):
@@ -84,8 +80,8 @@ def test_deleting_an_unknown_id_returns_400_not_a_crash(client):
 
 def test_a_job_still_prices_footage_correctly_after_editing_rates(client, ctx):
     """The rate editor is backed by real data — confirm adding a row doesn't
-    disturb the flat per-foot pricing."""
+    disturb the tiered aerial pricing."""
     from mercury.rates import calculate_job_total
 
     client.post("/api/rates", json={"name": "New Charge", "rate": 5, "unit": "ea"})
-    assert calculate_job_total({"A1 – Hang Overhead Drop": 780}) == pytest.approx(312.0)
+    assert calculate_job_total({"A1 – Hang Overhead Drop": 780}) == pytest.approx(240.0)

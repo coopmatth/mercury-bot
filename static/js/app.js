@@ -92,30 +92,24 @@ window.todayISO = todayISO;
 /* ------------------------------------------------------- pay rate engine */
 
 export let RATES = {
-  'R1 – Residential Installation': 70.0,
+  'R1 – Residential Installation': 110.0,
   'D8 – Drop Splice (Terminal & NID)': 15.0,
-  'D7 – Place NID Housing w/ Riser': 20.0,
-  'D11 – UG Temp Drop': 30.0,
-  'D6 – Pull Through Existing Conduit': 0.5,
+  'D7 – Place NID Housing w/ Riser': 12.5,
+  'D11 – UG Temp Drop': 20.0,
+  'D6 – Pull Through Existing Conduit': 0.55,
   'D5 – Sidewalk Bore': 25.0,
-  'D10 – Truck Roll / Trip Fee': 25.0,
-  'A1 – Hang Overhead Drop': 0.4,
-  'D2 – Direct Bury Flat Drop': 0.6,
-  'D9 – Install Flowerpot': 25.0,
-  'TC1 – Service/Repair Call': 37.5,
-  'RA1 – Replace Hang Overhead Drop': 0.4,
-  'RD1 – Replace Direct Bury Flat Drop': 0.6,
-  'RN1 – Replace NID': 20.0,
-  'RS1 – Drop Splice (Repair)': 15.0,
-  'W1 – Fixed Wireless Installation': 120.0,
-  'W2 – Fixed Wireless Installation (Fail)': 50.0,
-  'P1 – Post Placement': 30.0,
-  'Chargeback (Tech Error)': -50.0,
+  'D10 – Truck Roll / Trip Fee': 30.0,
+  'D2 – Direct Bury Flat Drop': 75.0,
 };
+
+/* The tiered aerial drop is priced by aerialPrice(), not looked up by name —
+ * RATES deliberately omits it, matching the server (its card row is a
+ * placeholder rate of 0 with is_tiered=1). */
+export const AERIAL_ITEM = 'A1 – Hang Overhead Drop';
 
 /* Pre-card-swap (2026-09-27) names -> current names. Jobs saved under the
  * old card still carry the old names in their items; resolving them here
- * keeps every existing job priced at the new rates. Mirrors RATE_ALIASES
+ * keeps every existing job priced at the current rates. Mirrors RATE_ALIASES
  * in mercury/rates.py — change both in the same commit. */
 export const RATE_ALIASES = {
   'Installation': 'R1 – Residential Installation',
@@ -131,10 +125,7 @@ export const RATE_ALIASES = {
 
 export const FOOTAGE_ITEMS = new Set([
   'A1 – Hang Overhead Drop',
-  'D2 – Direct Bury Flat Drop',
   'D6 – Pull Through Existing Conduit',
-  'RA1 – Replace Hang Overhead Drop',
-  'RD1 – Replace Direct Bury Flat Drop',
 ]);
 
 export function canonicalName(name) {
@@ -163,9 +154,18 @@ async function loadDynamicRates() {
   } catch (e) {}
 }
 
+export function aerialPrice(feet) {
+  const ft = Number(feet) || 0;
+  if (ft <= 0) return 0;
+  if (ft <= 300) return 75.0;
+  if (ft <= 600) return 150.0;
+  return Math.round((150.0 + (ft - 600) * 0.5) * 100) / 100;
+}
+
 export function itemPrice(name, qty) {
   const q = Number(qty) || 0;
   if (q <= 0) return 0;
+  if (canonicalName(name) === AERIAL_ITEM) return aerialPrice(q);
   return q * (RATES[canonicalName(name)] || 0);
 }
 

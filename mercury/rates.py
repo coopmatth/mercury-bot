@@ -7,15 +7,14 @@ from .db import get_db, new_id
 # `rates` table wholesale when the stored version doesn't match, so a
 # `git pull` + restart is all it takes to roll a new card out to every
 # install — including ones already seeded with an older card.
-RATE_CARD_VERSION = "2026-09-28-revert-old-rates"
+RATE_CARD_VERSION = "2026-09-28-revert-old-names"
 
-# The subcontractor rate card as it stood before the 2026-09-27
-# sub_inhome.xlsx swap: the new rates were postponed, so the old prices are
-# back in force. Item names and display order stay on the current card
-# (the 2026-09-27 reorder is untouched) — only prices, units and the
-# tiered aerial pricing are restored.
+# Full restore of the pre-2026-09-27 card: the new rates were postponed and
+# the user wanted the original line-item names back as well. Names, prices,
+# units, display order, and tiered aerial pricing are all back to exactly
+# how they were.
 # (name, rate, unit, is_tiered, sort_order).
-AERIAL_ITEM = "A1 – Hang Overhead Drop"
+AERIAL_ITEM = "Aerial Drop Footage"
 AERIAL_TIER_1_MAX = 300
 AERIAL_TIER_2_MAX = 600
 AERIAL_TIER_3_MIN = 601
@@ -24,32 +23,31 @@ AERIAL_TIER_2_PRICE = 150.00
 AERIAL_OVERAGE_RATE = 0.50
 
 NEW_RATE_CARD: list[tuple[str, float, str, int, int]] = [
-    ("R1 – Residential Installation", 110.00, "ea", 0, 1),
-    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 0, 2),
-    ("D7 – Place NID Housing w/ Riser", 12.50, "ea", 0, 3),
-    ("D11 – UG Temp Drop", 20.00, "ea", 0, 4),
-    ("D6 – Pull Through Existing Conduit", 0.55, "ft", 0, 5),
-    ("D5 – Sidewalk Bore", 25.00, "ea", 0, 6),
-    ("D10 – Truck Roll / Trip Fee", 30.00, "ea", 0, 7),
-    ("A1 – Hang Overhead Drop", 0.00, "ft", 1, 8),
-    ("D2 – Direct Bury Flat Drop", 75.00, "ea", 0, 9),
+    ("Installation", 110.00, "ea", 0, 1),
+    ("Fusion Splice", 15.00, "ea", 0, 2),
+    ("Place Nid w/ Riser", 12.50, "ea", 0, 3),
+    ("Temp drop laid", 20.00, "ea", 0, 4),
+    ("Trip Fee", 30.00, "ea", 0, 5),
+    ("Direct bury flat drop (0-300')", 75.00, "ea", 0, 6),
+    ("bore (0-12')", 25.00, "ea", 0, 7),
+    ("Conduit Pull Footage", 0.55, "ft", 0, 8),
+    ("Aerial Drop Footage", 0.00, "ft", 1, 9),
 ]
 
-# Old card names -> current names. Jobs saved before the 2026-09-27 card
-# swap still carry the old names in their `items` JSON; resolving them here
-# (and in normalize_items) keeps every existing job priced at the current
-# card instead of silently dropping to $0. "bore (0-12')" maps to D5 at the
-# same $25 it always paid.
+# 2026-09-27 card names -> restored original names. Jobs saved while the new
+# card was live carry the new names in their `items` JSON; resolving them
+# here (and in normalize_items) keeps every existing job priced instead of
+# silently dropping to $0.
 RATE_ALIASES: dict[str, str] = {
-    "Installation": "R1 – Residential Installation",
-    "Fusion Splice": "D8 – Drop Splice (Terminal & NID)",
-    "Place Nid w/ Riser": "D7 – Place NID Housing w/ Riser",
-    "Temp drop laid": "D11 – UG Temp Drop",
-    "Trip Fee": "D10 – Truck Roll / Trip Fee",
-    "Direct bury flat drop (0-300')": "D2 – Direct Bury Flat Drop",
-    "bore (0-12')": "D5 – Sidewalk Bore",
-    "Conduit Pull Footage": "D6 – Pull Through Existing Conduit",
-    "Aerial Drop Footage": "A1 – Hang Overhead Drop",
+    "R1 – Residential Installation": "Installation",
+    "D8 – Drop Splice (Terminal & NID)": "Fusion Splice",
+    "D7 – Place NID Housing w/ Riser": "Place Nid w/ Riser",
+    "D11 – UG Temp Drop": "Temp drop laid",
+    "D10 – Truck Roll / Trip Fee": "Trip Fee",
+    "D2 – Direct Bury Flat Drop": "Direct bury flat drop (0-300')",
+    "D5 – Sidewalk Bore": "bore (0-12')",
+    "D6 – Pull Through Existing Conduit": "Conduit Pull Footage",
+    "A1 – Hang Overhead Drop": "Aerial Drop Footage",
 }
 
 # Fallback default items

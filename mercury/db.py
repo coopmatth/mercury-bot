@@ -110,17 +110,17 @@ CREATE TABLE IF NOT EXISTS rates (
 # Seeded into `rates` the first time the table is empty, and wholesale-replaced
 # whenever RATE_CARD_VERSION changes (see init_db). Kept in step with
 # rates.py's NEW_RATE_CARD, which is the source of truth.
-RATE_CARD_VERSION = "2026-09-28-revert-old-rates"
+RATE_CARD_VERSION = "2026-09-28-revert-old-names"
 DEFAULT_RATE_CARD = [
-    ("R1 – Residential Installation", 110.00, "ea", 0, 1),
-    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 0, 2),
-    ("D7 – Place NID Housing w/ Riser", 12.50, "ea", 0, 3),
-    ("D11 – UG Temp Drop", 20.00, "ea", 0, 4),
-    ("D6 – Pull Through Existing Conduit", 0.55, "ft", 0, 5),
-    ("D5 – Sidewalk Bore", 25.00, "ea", 0, 6),
-    ("D10 – Truck Roll / Trip Fee", 30.00, "ea", 0, 7),
-    ("A1 – Hang Overhead Drop", 0.00, "ft", 1, 8),
-    ("D2 – Direct Bury Flat Drop", 75.00, "ea", 0, 9),
+    ("Installation", 110.00, "ea", 0, 1),
+    ("Fusion Splice", 15.00, "ea", 0, 2),
+    ("Place Nid w/ Riser", 12.50, "ea", 0, 3),
+    ("Temp drop laid", 20.00, "ea", 0, 4),
+    ("Trip Fee", 30.00, "ea", 0, 5),
+    ("Direct bury flat drop (0-300')", 75.00, "ea", 0, 6),
+    ("bore (0-12')", 25.00, "ea", 0, 7),
+    ("Conduit Pull Footage", 0.55, "ft", 0, 8),
+    ("Aerial Drop Footage", 0.00, "ft", 1, 9),
 ]
 
 SYNC_TABLES = {

@@ -29,7 +29,14 @@ def _js_rates() -> dict:
 def _js_aliases() -> dict:
     block = re.search(r"export const RATE_ALIASES = \{(.*?)\};", APP_JS, re.S)
     assert block, "RATE_ALIASES not found in static/js/app.js"
-    return dict(re.findall(r"""['"](.+?)['"]\s*:\s*['"](.+?)['"]""", block.group(1)))
+    # Item names can contain apostrophes (e.g. "bore (0-12')"), so parse
+    # line-by-line: the value runs to the last quote of its kind on the line.
+    aliases = {}
+    for line in block.group(1).splitlines():
+        m = re.match(r"""\s*['"](.+?)['"]\s*:\s*(['"])(.*)\2\s*,?\s*$""", line)
+        if m:
+            aliases[m.group(1)] = m.group(3)
+    return aliases
 
 
 def _js_footage_items() -> set:

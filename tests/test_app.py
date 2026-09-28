@@ -60,9 +60,9 @@ def test_parse_date_accepts_the_formats_the_app_emits():
 def test_week_summary_totals_jobs_and_custom_items(ctx):
     start, end = week_bounds()
     save_job({"work_date": start.isoformat(), "address": "A",
-              "items": {"R1 – Residential Installation": 2}})           # 140
+              "items": {"R1 – Residential Installation": 2}})           # 220 via alias
     save_job({"work_date": start.isoformat(), "address": "B",
-              "items": {"A1 – Hang Overhead Drop": 700}})              # 280.00
+              "items": {"A1 – Hang Overhead Drop": 700}})              # 200.00 via alias
     save_custom_item({"work_date": start.isoformat(), "name": "Extra",
                       "qty": 2, "rate": 45})                           # 90
 

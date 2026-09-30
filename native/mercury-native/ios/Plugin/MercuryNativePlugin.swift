@@ -146,6 +146,7 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var locationManager: CLLocationManager?
     private var pendingLocationCall: CAPPluginCall?
+    private var bestLocation: CLLocation?
     private var documentController: UIDocumentInteractionController?
 
     /// Presents the iOS "Open In…" menu for a downloaded file (spreadsheet,
@@ -190,9 +191,13 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// One-shot GPS fix for the photo timestamp stamp. Resolves
-    /// `{latitude, longitude, accuracy}` or rejects with a human-readable
-    /// reason the web side surfaces in the stamp/toast.
+    /// One-shot GPS fix for the photo timestamp stamp. Asks iOS for its best
+    /// fix and lets the receiver converge (the way Maps does) instead of
+    /// taking the first coarse Wi-Fi/cell fix: house-level precision needs
+    /// ~15 m accuracy, and a stale/coarse cached fix is what stamped
+    /// addresses 3–4 houses off.
+    /// Resolves `{latitude, longitude, accuracy}` or rejects with a
+    /// human-readable reason the web side surfaces in the stamp/toast.
     @objc func getLocation(_ call: CAPPluginCall) {
         switch CLLocationManager.authorizationStatus() {
         case .denied, .restricted:
@@ -204,41 +209,45 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         pendingLocationCall = call
+        bestLocation = nil
         let manager = CLLocationManager()
         manager.delegate = self
-        // A street-address stamp only needs ~10 m accuracy. Best accuracy
-        // makes iOS wait on a cold high-precision GPS fix (10+ s); ten
-        // meters resolves in a second or two off Wi-Fi/cell.
-        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        // House-level precision: best accuracy, then keep sampling until a
+        // fix is good enough or time runs out. Ten-meter "good enough"
+        // fixes off Wi-Fi/cell arrive in a second or two; a true GPS fix
+        // takes a few seconds longer but pins the right house.
+        manager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager = manager
 
-        // Prefer a fresh cached fix (instant) over waiting on the GPS at all.
+        // Only trust a cached fix when it's fresh AND already precise — a
+        // stale or coarse fix is what used to stamp 3–4 houses away.
         if let cached = manager.location,
-           cached.timestamp.timeIntervalSinceNow > -180,
-           cached.horizontalAccuracy > 0, cached.horizontalAccuracy <= 100 {
+           cached.timestamp.timeIntervalSinceNow > -60,
+           cached.horizontalAccuracy > 0, cached.horizontalAccuracy <= 20 {
             finishLocation(with: cached)
             return
         }
 
         if CLLocationManager.authorizationStatus() == .notDetermined {
             manager.requestWhenInUseAuthorization()
-            // requestLocation() fires from locationManagerDidChangeAuthorization
+            // startUpdatingLocation() fires from locationManagerDidChangeAuthorization
             // once the user answers the prompt.
         } else {
-            manager.requestLocation()
+            manager.startUpdatingLocation()
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-            guard let self, let pending = self.pendingLocationCall else { return }
-            self.pendingLocationCall = nil
-            self.locationManager = nil
-            pending.reject("Location timed out waiting for a GPS fix.")
+        // Up to 15 s for the GPS to converge; the best fix seen wins, even
+        // if it never reaches the early-finish threshold.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
+            guard let self else { return }
+            self.finishLocationWithBest()
         }
     }
 
     private func finishLocation(with location: CLLocation) {
         guard let pending = pendingLocationCall else { return }
         pendingLocationCall = nil
+        bestLocation = nil
         locationManager = nil
         pending.resolve([
             "latitude": location.coordinate.latitude,
@@ -247,9 +256,21 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
         ])
     }
 
+    /// Timeout path: keep the best fix the receiver produced rather than
+    /// failing outright — a 40 m fix still beats stamping date/time only.
+    private func finishLocationWithBest() {
+        guard pendingLocationCall != nil else { return }
+        if let best = bestLocation {
+            finishLocation(with: best)
+        } else {
+            failLocation("Location timed out waiting for a GPS fix.")
+        }
+    }
+
     private func failLocation(_ message: String) {
         guard let pending = pendingLocationCall else { return }
         pendingLocationCall = nil
+        bestLocation = nil
         locationManager = nil
         pending.reject(message)
     }
@@ -285,7 +306,7 @@ extension MercuryNativePlugin: CLLocationManagerDelegate {
         case .authorizedWhenInUse, .authorizedAlways:
             // The prompt was answered with "allow" — now take the fix.
             if pendingLocationCall != nil {
-                manager.requestLocation()
+                manager.startUpdatingLocation()
             }
         case .denied, .restricted:
             if pendingLocationCall != nil {
@@ -299,8 +320,20 @@ extension MercuryNativePlugin: CLLocationManagerDelegate {
 
     public func locationManager(_ manager: CLLocationManager,
                                 didUpdateLocations locations: [CLLocation]) {
-        if let latest = locations.last {
-            finishLocation(with: latest)
+        for location in locations {
+            // iOS replays stale fixes when an update stream starts; ignore
+            // those and anything invalid, and keep the sharpest fix seen.
+            guard location.horizontalAccuracy > 0,
+                  location.timestamp.timeIntervalSinceNow > -10 else { continue }
+            if bestLocation == nil
+                || location.horizontalAccuracy < bestLocation!.horizontalAccuracy {
+                bestLocation = location
+            }
+            // House-level precision reached — stop the GPS early.
+            if location.horizontalAccuracy <= 15 {
+                finishLocation(with: location)
+                return
+            }
         }
     }
 

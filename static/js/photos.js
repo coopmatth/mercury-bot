@@ -112,7 +112,10 @@ function getWebPosition(timeoutMs = 20000) {
     navigator.geolocation.getCurrentPosition(
       (pos) => finish({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
       (error) => finish(null, error),
-      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 60000 },
+      // maximumAge 0: never accept a cached fix. A minute-old position is
+      // what stamped addresses several houses off; a fresh high-accuracy
+      // fix is worth the extra couple of seconds.
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 },
     );
   });
 }

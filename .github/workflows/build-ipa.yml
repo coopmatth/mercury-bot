@@ -29,22 +29,23 @@ jobs:
 
       - name: Initialize Capacitor Shell
         run: |
-          # The iOS webview exposes no service worker, so the app cannot rely
-          # on a cached server-rendered site for offline cold starts. Bundle
-          # the offline shell instead: it paints instantly from the on-device
-          # IndexedDB replica and syncs through the API when there is signal.
-          bash ./native/shell/build.sh
-
-          npx cap init Mercury com.mercury.tracker --web-dir native/shell/www
-
-          # Local shell, no remote server.url. The shell reaches the API at
-          # the absolute Tailscale URL (allowed by the API's CORS config).
+          # The app loads the live site from the server (remote URL mode).
+          # (A bundled offline shell was tried 2026-10-03 and reverted —
+          # the iOS webview has no service worker, and the shell fragmented
+          # the app. See native/shell/ for the experiment.)
+          mkdir -p www
+          echo "<html><body>Loading...</body></html>" > www/index.html
+          
+          npx cap init Mercury com.mercury.tracker --web-dir www
+          
+          # Inject your Tailscale URL into the Capacitor config
           cat << EOF > capacitor.config.json
           {
             "appId": "com.mercury.tracker",
             "appName": "Mercury",
-            "webDir": "native/shell/www",
+            "webDir": "www",
             "server": {
+              "url": "https://discord-dnb20-series.tailc835fa.ts.net",
               "cleartext": true,
               "allowNavigation": ["discord-dnb20-series.tailc835fa.ts.net"]
             }

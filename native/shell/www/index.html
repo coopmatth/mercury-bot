@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1120">
+<title>Mercury Tracker</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mercury">
+<meta name="description" content="Offline-first field job tracking, pay and invoicing.">
+<meta name="color-scheme" content="dark">
+<style>html, body { background-color: #0B1120 !important; }</style>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <span class="brand">
+      <span class="brand-mark">⚡</span>
+      <span>Mercury</span>
+    </span>
+    <span class="spacer"></span>
+    <button id="sync-pill" class="pill pill-syncing" type="button" aria-live="polite">
+      <span class="dot dot-pulse"></span><span>Starting…</span>
+    </button>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ============================ HOME ============================ -->
+  <section data-view="home">
+    <div class="page-title">
+      <h1 id="greeting">Today</h1>
+      <p><span id="week-range">This week</span> · <span id="offline-note"></span></p>
+    </div>
+
+    <div class="stat-grid mb-2">
+      <div class="stat accent-green">
+        <div class="stat-label">Today</div>
+        <div class="stat-value text-green" data-stat="daily">$0.00</div>
+        <div class="stat-sub" id="today-name"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">This week</div>
+        <div class="stat-value text-accent" data-stat="weekly">$0.00</div>
+        <div class="stat-sub" data-sub="days_worked"></div>
+      </div>
+      <div class="stat accent-violet">
+        <div class="stat-label">Jobs</div>
+        <div class="stat-value sm text-violet" data-stat="job_count">0</div>
+        <div class="stat-sub" data-sub="avg_per_job"></div>
+      </div>
+      <div class="stat accent-amber">
+        <div class="stat-label">Per day</div>
+        <div class="stat-value sm text-amber" data-stat="avg_per_day">$0.00</div>
+        <div class="stat-sub">on days worked</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span>Earnings by day</span>
+        <span class="spacer"></span>
+        <span class="badge badge-soft" id="week-badge"></span>
+      </div>
+      <div class="card-body">
+        <div class="week-chart" data-chart></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span>Work completed</span>
+        <span class="spacer"></span>
+        <span class="badge badge-soft" data-task-badge></span>
+      </div>
+      <div class="list" data-task-list></div>
+    </div>
+
+    <div class="section-label">Recent jobs</div>
+    <div class="list" data-recent-jobs></div>
+  </section>
+
+  <!-- ============================ JOBS ============================ -->
+  <section data-view="jobs" hidden>
+    <div class="page-title">
+      <h1>Jobs</h1>
+      <p data-summary-line></p>
+    </div>
+
+    <div class="card mb-2">
+      <div class="card-body">
+        <input type="search" id="job-search" placeholder="Search address, order #, notes…"
+               aria-label="Search jobs" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="stat-grid mb-2">
+      <div class="stat"><div class="stat-label">Jobs</div><div class="stat-value sm" data-total="jobs">$0.00</div></div>
+      <div class="stat"><div class="stat-label">Custom</div><div class="stat-value sm" data-total="custom">$0.00</div></div>
+      <div class="stat"><div class="stat-label">Week</div><div class="stat-value sm text-accent" data-total="week">$0.00</div></div>
+    </div>
+
+    <div class="list" data-job-list></div>
+
+    <div class="card" id="custom-card">
+      <div class="card-head"><span>Custom items</span></div>
+      <div class="list" data-custom-list></div>
+    </div>
+  </section>
+
+  <!-- ============================ LOG ============================ -->
+  <section data-view="log" hidden>
+    <div class="page-title">
+      <h1 id="log-title">Log a job</h1>
+      <p>Saves to this device immediately — signal or not.</p>
+    </div>
+    <form id="job-form" autocomplete="off">
+      <input type="hidden" name="id" id="f-id">
+      <div class="card">
+        <div class="card-body">
+          <div class="field">
+            <label for="f-work_date">Date worked</label>
+            <input type="date" id="f-work_date" name="work_date" required>
+          </div>
+          <div class="field">
+            <label for="f-address">Address</label>
+            <input type="text" id="f-address" name="address" inputmode="text"
+                   placeholder="123 County Road 40">
+          </div>
+          <div class="field">
+            <label for="f-order_number">Order number</label>
+            <input type="text" id="f-order_number" name="order_number" inputmode="text"
+                   placeholder="e.g. 4471902">
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label">Work performed</div>
+      <div class="card">
+        <div class="list" id="f-items"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div class="section-label mt-0 mb-2">Drop Flags</div>
+          <div class="field-row mb-3">
+            <label class="btn btn-outline flex-between" style="min-height:50px; cursor:pointer;">
+              <span>Needs Buried</span>
+              <input type="checkbox" id="f-needs_buried" name="needs_buried" value="1" style="width:20px; height:20px;">
+            </label>
+            <label class="btn btn-outline flex-between" style="min-height:50px; cursor:pointer;">
+              <span>Needs Bore</span>
+              <input type="checkbox" id="f-needs_bore" name="needs_bore" value="1" style="width:20px; height:20px;">
+            </label>
+          </div>
+          <div class="field mb-0">
+            <label for="f-notes">Notes</label>
+            <textarea id="f-notes" name="notes" placeholder="Anything the office needs to know"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="sticky-actions">
+        <div class="total-bar">
+          <span class="label">Job total</span>
+          <span class="value" id="f-total">$0.00</span>
+        </div>
+        <div class="btn-stack">
+          <button type="submit" class="btn btn-primary btn-lg btn-block" id="f-save">Save job</button>
+          <button type="button" class="btn btn-danger btn-block" id="f-delete" hidden>Delete job</button>
+          <button type="button" class="btn btn-ghost btn-block" data-view-link="jobs">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <!-- ============================ SETTINGS ============================ -->
+  <section data-view="settings" hidden>
+    <div class="page-title">
+      <h1>Settings</h1>
+      <p>Offline-first: this app opens with or without signal.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>Sync</span></div>
+      <div class="card-body">
+        <div class="flex-between mb-1"><span class="text-dim">Status</span><strong id="s-status">—</strong></div>
+        <div class="flex-between mb-1"><span class="text-dim">This device</span><strong class="mono text-xs" id="s-device">—</strong></div>
+        <div class="flex-between mb-1"><span class="text-dim">Waiting to sync</span><strong id="s-pending">—</strong></div>
+        <div class="flex-between mb-2"><span class="text-dim">Last sync</span><strong id="s-last">—</strong></div>
+        <div class="btn-stack">
+          <button class="btn btn-primary btn-block" id="s-sync">Sync now</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>Full site</span></div>
+      <div class="card-body">
+        <p class="text-dim text-sm mb-2">Reports, scanner, photos and invoices live on the full site and need a connection.</p>
+        <div class="btn-stack">
+          <button class="btn btn-outline btn-block" data-fullsite="/reports">Reports</button>
+          <button class="btn btn-outline btn-block" data-fullsite="/scanner">Scanner</button>
+          <button class="btn btn-outline btn-block" data-fullsite="/photos">Photos</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <button class="tab active" data-view-link="home" type="button">
+    <span class="tab-icon">◎</span><span>Home</span>
+  </button>
+  <button class="tab" data-view-link="jobs" type="button">
+    <span class="tab-icon">☰</span><span>Jobs</span>
+  </button>
+  <button class="tab tab-fab" data-view-link="log" type="button" aria-label="Log a new job">
+    <span class="tab-icon">+</span><span>Log</span>
+  </button>
+  <button class="tab" data-view-link="settings" type="button">
+    <span class="tab-icon">⚙</span><span>Settings</span>
+  </button>
+</nav>
+
+<div class="toast-host"></div>
+
+<script type="module" src="js/shell.js"></script>
+</body>
+</html>

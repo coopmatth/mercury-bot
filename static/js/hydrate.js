@@ -9,9 +9,16 @@
  * A page opts in with data-hydrate on <body> and supplies the week via
  * data-week-start / data-week-end. */
 
-import { money, itemPrice, RATES, RATE_ALIASES, FOOTAGE_ITEMS } from './app.js';
+import { money, itemPrice, RATES, RATE_ALIASES, FOOTAGE_ITEMS } from './rates.js';
 import { weekSummary, niceDate } from './local.js';
 import * as store from './store.js';
+
+/* The render functions are exported for the bundled offline shell, which
+ * builds its views client-side instead of from server-rendered HTML. */
+export {
+  renderDashboard, renderJobs, renderCustom,
+  jobRow, customRow, emptyState, rateLabel, qtyText, el, setText, pendingIds,
+};
 
 const body = document.body;
 const MODE = body.dataset.hydrate;

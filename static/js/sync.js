@@ -9,6 +9,7 @@
  * next attempt picks it up. */
 
 import * as store from './store.js';
+import { apiUrl } from './rates.js';
 
 const SYNC_INTERVAL = 60_000;
 const RETRY_BACKOFF = [2_000, 5_000, 15_000, 30_000, 60_000];
@@ -69,7 +70,7 @@ export async function syncNow({ silent = false } = {}) {
       changes,
     };
 
-    const response = await fetch('/api/sync', {
+    const response = await fetch(apiUrl('/api/sync'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

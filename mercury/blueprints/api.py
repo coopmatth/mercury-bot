@@ -19,6 +19,33 @@ from ..sync import devices, sync
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
+# The bundled iOS app shell runs from capacitor://localhost (not the server
+# origin), so its API calls are cross-origin. iOS WKWebView exposes no
+# service worker, which is why the shell exists at all — without CORS the
+# shell could never sync. Only the app's own origins are allowed.
+_APP_ORIGINS = frozenset({
+    "capacitor://localhost",
+    "ionic://localhost",
+    "http://localhost",
+})
+
+
+@bp.after_request
+def _cors_for_app_shell(response):
+    origin = request.headers.get("Origin", "")
+    if origin in _APP_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Device-Id"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
+@bp.route("/<path:_any>", methods=["OPTIONS"])
+def _cors_preflight(_any):
+    # Handled by _cors_for_app_shell above; just needs a 200.
+    return ("", 200)
+
 # Whitelists, not blacklists: a value has to match the expected shape, so
 # there's no character set left to smuggle a newline or an "=" through.
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")

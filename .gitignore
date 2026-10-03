@@ -22,3 +22,12 @@ venv/
 Thumbs.db
 .idea/
 .vscode/
+
+# Assembled iOS app shell (built by native/shell/build.sh at IPA build time).
+native/shell/www/css/
+native/shell/www/js/store.js
+native/shell/www/js/sync.js
+native/shell/www/js/rates.js
+native/shell/www/js/local.js
+native/shell/www/js/hydrate.js
+native/shell/www/js/native.js

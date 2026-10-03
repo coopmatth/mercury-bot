@@ -8,7 +8,7 @@ import pytest
 from mercury.config import BASE_DIR
 from mercury.rates import FOOTAGE_ITEMS, RATE_ALIASES, get_pay_rates
 
-APP_JS = (BASE_DIR / "static" / "js" / "app.js").read_text()
+APP_JS = (BASE_DIR / "static" / "js" / "rates.js").read_text()  # rate engine moved out of app.js
 
 
 def _js_rates() -> dict:
@@ -16,7 +16,7 @@ def _js_rates() -> dict:
     # app.js) mutates this object in place once the client fetches the live
     # rate card, so it can no longer be declared const.
     block = re.search(r"export let RATES = \{(.*?)\};", APP_JS, re.S)
-    assert block, "RATES table not found in static/js/app.js"
+    assert block, "RATES table not found in static/js/rates.js"
     rates = {}
     for name, value in re.findall(r"""['"](.+?)['"]\s*:\s*(-?[\d.]+)""", block.group(1)):
         rates[name] = float(value)
@@ -25,7 +25,7 @@ def _js_rates() -> dict:
 
 def _js_aliases() -> dict:
     block = re.search(r"export const RATE_ALIASES = \{(.*?)\};", APP_JS, re.S)
-    assert block, "RATE_ALIASES not found in static/js/app.js"
+    assert block, "RATE_ALIASES not found in static/js/rates.js"
     # Item names can contain apostrophes (e.g. "bore (0-12')"), so parse
     # line-by-line: the value runs to the last quote of its kind on the line.
     aliases = {}
@@ -38,7 +38,7 @@ def _js_aliases() -> dict:
 
 def _js_footage_items() -> set:
     block = re.search(r"export const FOOTAGE_ITEMS = new Set\(\[(.*?)\]\);", APP_JS, re.S)
-    assert block, "FOOTAGE_ITEMS not found in static/js/app.js"
+    assert block, "FOOTAGE_ITEMS not found in static/js/rates.js"
     # Item names can contain apostrophes, so parse line-by-line: the name
     # runs to the last quote of its kind on the line.
     items = set()

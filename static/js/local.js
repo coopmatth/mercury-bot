@@ -6,7 +6,7 @@
  * job logged offline appears in the list immediately instead of waiting for
  * a round trip that may be hours away. */
 
-import { itemPrice } from './app.js';
+import { itemPrice } from './rates.js';
 import * as store from './store.js';
 
 const DAY_MS = 86_400_000;

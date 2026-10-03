@@ -14,7 +14,8 @@
     <div class="flex-between mb-1"><span class="text-dim">Server revision</span><strong class="mono">{{ server_seq }}</strong></div>
     <div class="flex-between mb-1"><span class="text-dim">This device</span><strong class="mono text-xs" id="device-id">—</strong></div>
     <div class="flex-between mb-1"><span class="text-dim">Waiting to sync</span><strong id="pending-count">—</strong></div>
-    <div class="flex-between mb-2"><span class="text-dim">Last sync</span><strong id="last-sync">—</strong></div>
+    <div class="flex-between mb-1"><span class="text-dim">Last sync</span><strong id="last-sync">—</strong></div>
+    <div class="flex-between mb-2"><span class="text-dim">Offline ready</span><strong id="offline-status">checking…</strong></div>
     <div class="btn-stack">
       <button class="btn btn-primary btn-block" id="sync-btn" data-requires-online>Sync now</button>
       <button class="btn btn-danger btn-block" id="reset-btn"
@@ -192,6 +193,45 @@
       last ? new Date(last).toLocaleString() : 'never';
   }
   refresh();
+
+  /* Offline diagnostic: the app opens with no signal only when the service
+   * worker is installed and controlling the page. If it ever reports
+   * anything but "yes", tap it to reinstall the offline cache. */
+  async function checkOffline() {
+    const el = document.getElementById('offline-status');
+    if (!('serviceWorker' in navigator)) {
+      el.textContent = 'not supported on this device';
+      return;
+    }
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        el.textContent = 'not installed — tap to fix';
+      } else if (navigator.serviceWorker.controller) {
+        el.textContent = 'yes';
+      } else {
+        el.textContent = 'installing…';
+      }
+      reg?.update().catch(() => {});
+    } catch (e) {
+      el.textContent = 'check failed — tap to fix';
+    }
+  }
+  checkOffline();
+
+  document.getElementById('offline-status').addEventListener('click', async () => {
+    const el = document.getElementById('offline-status');
+    if (!('serviceWorker' in navigator)) return;
+    el.textContent = 'reinstalling…';
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      await reg?.unregister();
+      toast('Offline cache cleared — reopen the app to reinstall it.', 'info', 5000);
+    } catch (e) {
+      toast('Could not reinstall the offline cache.', 'danger');
+    }
+    checkOffline();
+  });
 
   document.getElementById('sync-btn').addEventListener('click', async () => {
     const result = await sync.syncNow();

@@ -206,7 +206,10 @@ export async function removeRow(storeName, id) {
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  window.addEventListener('load', async () => {
+  // Register immediately rather than on window load: the earlier the
+  // worker installs, the sooner the offline cache exists, and a slow
+  // page must not delay it.
+  (async () => {
     try {
       const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       registration.addEventListener('updatefound', () => {
@@ -220,7 +223,15 @@ function registerServiceWorker() {
     } catch (e) {
       console.warn('Service worker registration failed', e);
     }
-  });
+  })();
+
+  if (document.readyState === 'complete') {
+    navigator.serviceWorker.getRegistration().then((r) => r?.update().catch(() => {}));
+  } else {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.getRegistration().then((r) => r?.update().catch(() => {}));
+    });
+  }
 
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type === 'sync-now') sync.syncNow({ silent: true });

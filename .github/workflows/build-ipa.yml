@@ -33,7 +33,7 @@ jobs:
           # on a cached server-rendered site for offline cold starts. Bundle
           # the offline shell instead: it paints instantly from the on-device
           # IndexedDB replica and syncs through the API when there is signal.
-          ./native/shell/build.sh
+          bash ./native/shell/build.sh
 
           npx cap init Mercury com.mercury.tracker --web-dir native/shell/www
 

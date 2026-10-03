@@ -3,6 +3,24 @@
 import * as store from './store.js';
 import sync from './sync.js';
 import { isNativeApp, openFile } from './native.js';
+import {
+  money as _money, itemPrice as _itemPrice, jobTotal as _jobTotal,
+  todayISO as _todayISO,
+} from './rates.js';
+import {
+  money, qtyText, todayISO, RATES, RATE_ALIASES, FOOTAGE_ITEMS,
+  canonicalName, loadDynamicRates, itemPrice, jobTotal,
+  setApiBase, apiUrl,
+} from './rates.js';
+export {
+  money, qtyText, todayISO, RATES, RATE_ALIASES, FOOTAGE_ITEMS,
+  canonicalName, loadDynamicRates, itemPrice, jobTotal,
+  setApiBase, apiUrl,
+};
+window.money = _money;
+window.itemPrice = _itemPrice;
+window.jobTotal = _jobTotal;
+window.todayISO = _todayISO;
 
 /* --------------------------------------------------------------- toasts */
 
@@ -71,20 +89,6 @@ function renderStatus(state) {
     ? `Last synced ${new Date(state.lastSync).toLocaleTimeString()}`
     : 'Not synced yet';
 }
-
-import {
-  money as _money, qtyText as _qtyText, todayISO as _todayISO,
-  itemPrice as _itemPrice, jobTotal as _jobTotal,
-} from './rates.js';
-export {
-  money, qtyText, todayISO, RATES, RATE_ALIASES, FOOTAGE_ITEMS,
-  canonicalName, loadDynamicRates, itemPrice, jobTotal,
-  setApiBase, apiUrl,
-} from './rates.js';
-window.money = _money;
-window.itemPrice = _itemPrice;
-window.jobTotal = _jobTotal;
-window.todayISO = _todayISO;
 
 /* ------------------------------------------------------- data accessors */
 

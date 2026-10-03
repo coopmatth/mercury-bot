@@ -82,8 +82,8 @@
 
 <div class="toast-host"></div>
 
-<script type="module" src="/static/js/app.js"></script>
-{% if hydrate_mode|default('') %}<script type="module" src="/static/js/hydrate.js"></script>{% endif %}
+<script type="module" src="/static/js/app.js?v={{ js_version }}"></script>
+{% if hydrate_mode|default('') %}<script type="module" src="/static/js/hydrate.js?v={{ js_version }}"></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

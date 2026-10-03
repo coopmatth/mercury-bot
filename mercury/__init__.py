@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 import time
 from datetime import datetime
-from flask import Flask
+from flask import Flask, request
 
 from .config import Config
 
@@ -131,5 +131,14 @@ def create_app(config: type[Config] = Config) -> Flask:
     register_filters(app)
 
     start_daily_dispatch_scheduler(app)
+
+    @app.after_request
+    def _no_cache_js(response):
+        # The phone caches aggressively and the iOS webview has no service
+        # worker to manage updates. Force revalidation of JS/CSS so a deploy
+        # always reaches the device. (HTML entry points also carry ?v=.)
+        if request.path.startswith("/static/js/") or request.path.startswith("/static/css/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
     return app

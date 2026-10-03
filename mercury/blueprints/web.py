@@ -36,6 +36,9 @@ def inject_globals():
         "demo_mode": Config.DEMO,
         "email_configured": Config.email_configured() or Config.DEMO,
         "app_version": current_app.config.get("VERSION", "2.0.0"),
+        # Cache-buster for JS: changes whenever any watched file changes,
+        # so the phone never runs a stale cached module after a deploy.
+        "js_version": build_id(),
     }
 
 

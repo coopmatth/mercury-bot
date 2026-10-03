@@ -92,15 +92,15 @@ window.todayISO = todayISO;
 /* ------------------------------------------------------- pay rate engine */
 
 export let RATES = {
-  'R1 – Residential Installation': 70.0,
-  'D8 – Drop Splice (Terminal & NID)': 15.0,
-  'D7 – Place NID Housing w/ Riser': 20.0,
-  'D11 – UG Temp Drop': 30.0,
-  'D6 – Pull Through Existing Conduit': 0.5,
-  'D5 – Sidewalk Bore': 25.0,
-  'D10 – Truck Roll / Trip Fee': 25.0,
-  'A1 – Hang Overhead Drop': 0.4,
-  'D2 – Direct Bury Flat Drop': 0.6,
+  'Installation': 70.0,
+  'Fusion Splice': 15.0,
+  'Place Nid w/ Riser': 20.0,
+  'Temp drop laid': 30.0,
+  'Conduit Pull Footage': 0.5,
+  'bore (0-12')': 25.0,
+  'Trip Fee': 25.0,
+  'Aerial Drop Footage': 0.4,
+  'Direct bury flat drop (0-300')': 0.6,
   'D9 – Install Flowerpot': 25.0,
   'TC1 – Service/Repair Call': 37.5,
   'RA1 – Replace Hang Overhead Drop': 0.4,
@@ -118,21 +118,21 @@ export let RATES = {
  * keeps every existing job priced at the new rates. Mirrors RATE_ALIASES
  * in mercury/rates.py — change both in the same commit. */
 export const RATE_ALIASES = {
-  'Installation': 'R1 – Residential Installation',
-  'Fusion Splice': 'D8 – Drop Splice (Terminal & NID)',
-  'Place Nid w/ Riser': 'D7 – Place NID Housing w/ Riser',
-  'Temp drop laid': 'D11 – UG Temp Drop',
-  'Trip Fee': 'D10 – Truck Roll / Trip Fee',
-  "Direct bury flat drop (0-300')": 'D2 – Direct Bury Flat Drop',
-  "bore (0-12')": 'D5 – Sidewalk Bore',
-  'Conduit Pull Footage': 'D6 – Pull Through Existing Conduit',
-  'Aerial Drop Footage': 'A1 – Hang Overhead Drop',
+  'R1 – Residential Installation': 'Installation',
+  'D8 – Drop Splice (Terminal & NID)': 'Fusion Splice',
+  'D7 – Place NID Housing w/ Riser': 'Place Nid w/ Riser',
+  'D11 – UG Temp Drop': 'Temp drop laid',
+  'D10 – Truck Roll / Trip Fee': 'Trip Fee',
+  "D2 – Direct Bury Flat Drop": "Direct bury flat drop (0-300')",
+  "D5 – Sidewalk Bore": "bore (0-12')",
+  'D6 – Pull Through Existing Conduit': 'Conduit Pull Footage',
+  'A1 – Hang Overhead Drop': 'Aerial Drop Footage',
 };
 
 export const FOOTAGE_ITEMS = new Set([
-  'A1 – Hang Overhead Drop',
-  'D2 – Direct Bury Flat Drop',
-  'D6 – Pull Through Existing Conduit',
+  'Aerial Drop Footage',
+  'Direct bury flat drop (0-300')',
+  'Conduit Pull Footage',
   'RA1 – Replace Hang Overhead Drop',
   'RD1 – Replace Direct Bury Flat Drop',
 ]);

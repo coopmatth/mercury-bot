@@ -39,7 +39,14 @@ def _js_aliases() -> dict:
 def _js_footage_items() -> set:
     block = re.search(r"export const FOOTAGE_ITEMS = new Set\(\[(.*?)\]\);", APP_JS, re.S)
     assert block, "FOOTAGE_ITEMS not found in static/js/app.js"
-    return set(re.findall(r"""['"](.+?)['"]""", block.group(1)))
+    # Item names can contain apostrophes (e.g. "bore (0-12')"), so parse
+    # line-by-line: the name runs to the last quote of its kind on the line.
+    items = set()
+    for line in block.group(1).splitlines():
+        m = re.match(r"""\s*(['"])(.*)\1\s*,?\s*$""", line)
+        if m:
+            items.add(m.group(2))
+    return items
 
 
 def test_flat_rates_match_the_server():

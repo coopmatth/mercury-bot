@@ -90,7 +90,7 @@ def test_invoice_bills_per_foot_items_on_single_lines(ctx):
     lines, total = invoice_lines(start, end)
     assert len(lines) == 1
     line = lines[0]
-    assert line["description"] == "A1 – Hang Overhead Drop"
+    assert line["description"] == "Aerial Drop Footage"  # via alias
     assert line["qty"] == pytest.approx(1630)
     assert line["rate"] == pytest.approx(0.4)
     assert line["amount"] == pytest.approx(652.0)

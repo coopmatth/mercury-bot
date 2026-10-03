@@ -27,16 +27,16 @@ ADDRESSES = [
 
 # Each entry is one plausible day's work.
 JOB_PATTERNS = [
-    {"R1 – Residential Installation": 1, "D8 – Drop Splice (Terminal & NID)": 2, "A1 – Hang Overhead Drop": 420},
-    {"R1 – Residential Installation": 1, "D7 – Place NID Housing w/ Riser": 1, "D5 – Sidewalk Bore": 2},
-    {"R1 – Residential Installation": 2, "D6 – Pull Through Existing Conduit": 180},
-    {"R1 – Residential Installation": 1, "D11 – UG Temp Drop": 1, "D10 – Truck Roll / Trip Fee": 1},
-    {"R1 – Residential Installation": 1, "D2 – Direct Bury Flat Drop": 120, "D8 – Drop Splice (Terminal & NID)": 1},
-    {"R1 – Residential Installation": 1, "A1 – Hang Overhead Drop": 780},
-    {"R1 – Residential Installation": 1, "D8 – Drop Splice (Terminal & NID)": 1, "A1 – Hang Overhead Drop": 260},
-    {"D10 – Truck Roll / Trip Fee": 1},
-    {"R1 – Residential Installation": 2, "D8 – Drop Splice (Terminal & NID)": 3, "D7 – Place NID Housing w/ Riser": 2},
-    {"R1 – Residential Installation": 1, "D6 – Pull Through Existing Conduit": 95, "D5 – Sidewalk Bore": 1},
+    {"Installation": 1, "Fusion Splice": 2, "Aerial Drop Footage": 420},
+    {"Installation": 1, "Place Nid w/ Riser": 1, "bore (0-12')": 2},
+    {"Installation": 2, "Conduit Pull Footage": 180},
+    {"Installation": 1, "Temp drop laid": 1, "Trip Fee": 1},
+    {"Installation": 1, "Direct bury flat drop (0-300')": 120, "Fusion Splice": 1},
+    {"Installation": 1, "Aerial Drop Footage": 780},
+    {"Installation": 1, "Fusion Splice": 1, "Aerial Drop Footage": 260},
+    {"Trip Fee": 1},
+    {"Installation": 2, "Fusion Splice": 3, "Place Nid w/ Riser": 2},
+    {"Installation": 1, "Conduit Pull Footage": 95, "bore (0-12')": 1},
 ]
 
 # Enough work in the current week that the dashboard has real numbers on it.

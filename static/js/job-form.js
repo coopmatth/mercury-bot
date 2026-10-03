@@ -1,6 +1,6 @@
 /* Job form. */
 
-import { itemPrice, jobTotal, money, saveJob, removeRow, toast, buzz } from './app.js';
+import { itemPrice, jobTotal, money, saveJob, removeRow, toast, buzz, routerNav } from './app.js';
 
 const form = document.getElementById('job-form');
 const rows = [...document.querySelectorAll('.qty-row')];
@@ -89,7 +89,7 @@ form.addEventListener('submit', async (event) => {
         kind: navigator.onLine ? 'success' : 'warning',
       }),
     );
-    window.location.href = '/jobs';
+    routerNav('/jobs');
   } catch (error) {
     button.disabled = false;
     button.textContent = 'Save job';
@@ -103,7 +103,7 @@ document.getElementById('delete-btn')?.addEventListener('click', async () => {
     'mercury:flash',
     JSON.stringify({ message: 'Job deleted.', kind: 'success' }),
   );
-  window.location.href = '/jobs';
+  routerNav('/jobs');
 });
 
 let dirty = false;

@@ -234,6 +234,19 @@ window.mercury = {
 init();
 
 /* ------------------------------------------------- seamless navigation router */
+
+/** Navigate via the SPA router (no full page load, no white flash).
+ * Used by form save handlers that previously did location.href jumps. */
+export function routerNav(url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+window.routerNav = routerNav;
+
 document.addEventListener('click', async (event) => {
   const link = event.target.closest('a');
   if (!link || !link.href) return;
@@ -272,7 +285,14 @@ document.addEventListener('click', async (event) => {
       doc.querySelectorAll('body script').forEach(script => {
         if (script.src && (script.src.includes('app.js') || script.src.includes('hydrate.js'))) return;
         const newScript = document.createElement('script');
-        if (script.src) newScript.src = script.src;
+        if (script.src) {
+          // ES modules are singletons: re-adding the same src does NOT
+          // re-execute. Bust the cache so page scripts (e.g. job-form.js)
+          // re-initialize against the freshly swapped DOM.
+          const url = new URL(script.src, window.location.origin);
+          url.searchParams.set('_r', Date.now().toString());
+          newScript.src = url.toString();
+        }
         if (script.type) newScript.type = script.type;
         newScript.textContent = script.textContent;
         document.body.appendChild(newScript);

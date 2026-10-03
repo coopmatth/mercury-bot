@@ -110,27 +110,17 @@ CREATE TABLE IF NOT EXISTS rates (
 # Seeded into `rates` the first time the table is empty, and wholesale-replaced
 # whenever RATE_CARD_VERSION changes (see init_db). Kept in step with
 # rates.py's NEW_RATE_CARD, which is the source of truth.
-RATE_CARD_VERSION = "2026-10-03-sub-inhome"
+RATE_CARD_VERSION = "2026-10-03-sub-inhome-9"
 DEFAULT_RATE_CARD = [
-    ("Installation", 70.00, "ea", 0, 1),
-    ("Fusion Splice", 15.00, "ea", 0, 2),
-    ("Place Nid w/ Riser", 20.00, "ea", 0, 3),
-    ("Temp drop laid", 30.00, "ea", 0, 4),
-    ("Conduit Pull Footage", 0.50, "ft", 0, 5),
-    ("bore (0-12')", 25.00, "ea", 0, 6),
-    ("Trip Fee", 25.00, "ea", 0, 7),
-    ("Aerial Drop Footage", 0.40, "ft", 0, 8),
-    ("Direct bury flat drop (0-300')", 0.60, "ft", 0, 9),
-    ("D9 – Install Flowerpot", 25.00, "ea", 0, 10),
-    ("TC1 – Service/Repair Call", 37.50, "ea", 0, 11),
-    ("RA1 – Replace Hang Overhead Drop", 0.40, "ft", 0, 12),
-    ("RD1 – Replace Direct Bury Flat Drop", 0.60, "ft", 0, 13),
-    ("RN1 – Replace NID", 20.00, "ea", 0, 14),
-    ("RS1 – Drop Splice (Repair)", 15.00, "ea", 0, 15),
-    ("W1 – Fixed Wireless Installation", 120.00, "ea", 0, 16),
-    ("W2 – Fixed Wireless Installation (Fail)", 50.00, "ea", 0, 17),
-    ("P1 – Post Placement", 30.00, "ea", 0, 18),
-    ("Chargeback (Tech Error)", -50.00, "ea", 0, 19),
+    ("R1 – Residential Installation", 70.00, "ea", 0, 1),
+    ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 0, 2),
+    ("D7 – Place NID Housing w/ Riser", 20.00, "ea", 0, 3),
+    ("D11 – UG Temp Drop", 30.00, "ea", 0, 4),
+    ("D6 – Pull Through Existing Conduit", 0.50, "ft", 0, 5),
+    ("D5 – Sidewalk Bore", 25.00, "ea", 0, 6),
+    ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 0, 7),
+    ("A1 – Hang Overhead Drop", 0.40, "ft", 0, 8),
+    ("D2 – Direct Bury Flat Drop", 0.60, "ft", 0, 9),
 ]
 
 SYNC_TABLES = {

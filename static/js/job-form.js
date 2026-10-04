@@ -33,6 +33,11 @@ function refresh() {
 }
 
 for (const row of rows) {
+  // Idempotent: the router may re-execute this module on navigation.
+  // Skip rows that already have listeners to avoid double-counting.
+  if (row.dataset.wired) continue;
+  row.dataset.wired = '1';
+
   const input = row.querySelector('.qty-input');
   const step = parseFloat(input.step) === 1 ? 1 : 25;
 

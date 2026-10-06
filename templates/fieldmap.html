@@ -2,7 +2,9 @@
 {% set active_tab = 'map' %}
 {% block title %}Field Map · Mercury{% endblock %}
 
-{% block head %}
+{% block head %}{% endblock %}
+
+{% block content %}
 <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css?v={{ js_version }}">
 <style>
   :root {
@@ -161,9 +163,6 @@
   .fm-pt input { width: 100%; margin-top: 6px; background: #0b1322; border: 1px solid var(--fm-line); border-radius: 8px; color: #e6edf7; padding: 7px 9px; font-size: 13px; }
   .fm-chip { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 20px; color: #04121e; }
 </style>
-{% endblock %}
-
-{% block content %}
 <div id="fm-app">
   <div id="fm-topbar">
     <div id="fm-types" role="tablist" aria-label="Measurement type"></div>

@@ -101,6 +101,76 @@ function initCustomPanel() {
 }
 
 
+
+/* ---------------- Saved Jobs folder ---------------- */
+function renderSavedList() {
+  const host = document.getElementById('fm-saved-list');
+  const all = loadAll();
+  host.innerHTML = '';
+  if (!all.length) {
+    host.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#8b98ad;">' +
+      '<div style="font-size:16px;font-weight:800;margin-bottom:8px;">NO SAVED JOBS YET</div>' +
+      '<div style="font-size:13px;">Create a job from the map screen. Drafts save automatically.</div></div>';
+    return;
+  }
+  for (const job of all) {
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#0b1322;border:1px solid var(--fm-line);border-radius:12px;padding:12px;margin-bottom:10px;';
+    const d = new Date(job.ts);
+    const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+      d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const pts = (job.points || []).length;
+    const grand = job.grand || 0;
+    let breakdown = '';
+    if (job.totals) {
+      const parts = [];
+      for (const [k, v] of Object.entries(job.totals)) {
+        if (v > 0) {
+          const t = TYPES[k];
+          const label = t ? t.label : k;
+          parts.push('<span style="color:' + (t ? t.color : '#8b98ad') + ';">' + label + ' ' + Math.round(v) + 'ft</span>');
+        }
+      }
+      if (parts.length) breakdown = '<div style="font-size:12px;margin-top:6px;">' + parts.join(' · ') + '</div>';
+    }
+    card.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<div><div style="font-weight:800;font-size:14px;">' + Math.round(grand) + ' ft</div>' +
+        '<div style="font-size:12px;color:#8b98ad;">' + dateStr + ' · ' + pts + ' pts</div></div>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<button class="fm-btn" data-act="open" style="padding:8px 12px;font-size:12px;">Open</button>' +
+          '<button class="fm-btn warn" data-act="del" style="padding:8px 12px;font-size:12px;">Delete</button>' +
+        '</div>' +
+      '</div>' + breakdown;
+    card.querySelector('[data-act="open"]').addEventListener('click', () => {
+      openMap(job);
+      document.getElementById('fm-saved-overlay').hidden = true;
+      toast('Job loaded', 'ok');
+    });
+    card.querySelector('[data-act="del"]').addEventListener('click', () => {
+      if (!confirm('Delete this saved job?')) return;
+      const all2 = loadAll().filter((m) => m.id !== job.id);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(all2)); } catch (e) {}
+      // also delete from server (best effort)
+      fetch('/api/fieldmaps/' + job.id, { method: 'DELETE' }).catch(() => {});
+      renderSavedList();
+      buzz(10);
+    });
+    host.appendChild(card);
+  }
+}
+
+function initSavedFolder() {
+  document.getElementById('fm-saved-btn').addEventListener('click', () => {
+    renderSavedList();
+    document.getElementById('fm-saved-overlay').hidden = false;
+    buzz(8);
+  });
+  document.getElementById('fm-saved-close').addEventListener('click', () => {
+    document.getElementById('fm-saved-overlay').hidden = true;
+  });
+}
+
 /* Mercury rate-card mapping (see 2026-10-03 9-item card) */
 const RATE_MAP = {
   aerial:  { name: 'Hang Overhead Drop',        unit: 'ft',  price: 0.40 },
@@ -1014,6 +1084,7 @@ function boot() {
   _booted = true;
   try {
     initCustomPanel();
+    initSavedFolder();
     renderTypes();
   } catch (e) {
     console.error('renderTypes failed:', e);

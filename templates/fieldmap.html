@@ -171,6 +171,7 @@
       <button class="pill" id="fm-center" type="button">Center on me</button>
       <input id="fm-search" type="search" placeholder="Service address…" autocomplete="off">
       <button class="pill" id="fm-tools-btn" type="button">☰ Tools</button>
+      <button class="pill" id="fm-saved-btn" type="button">🗂 Saved</button>
     </div>
     <div id="fm-totals"><span>TOTAL <b id="fm-total">0.0 ft</b></span><span id="fm-gpsacc"></span><span id="fm-savestate"></span></div>
   </div>
@@ -265,6 +266,16 @@
   </div>
 </div>
 
+<div class="fm-overlay" id="fm-saved-overlay" hidden>
+  <div class="fm-sheet" style="max-width:480px;max-height:80vh;display:flex;flex-direction:column;">
+    <h3>SAVED JOBS</h3>
+    <div style="font-size:12px;color:#8b98ad;margin-bottom:10px;">Jobs live only on this device. No cloud sync.</div>
+    <div id="fm-saved-list" style="overflow-y:auto;flex:1;"></div>
+    <div class="fm-row">
+      <button class="fm-btn warn" id="fm-saved-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
 <div class="fm-overlay" id="fm-relabel-overlay" hidden>
   <div class="fm-sheet" style="max-width:420px;">
     <h3>RELABEL POINT</h3>

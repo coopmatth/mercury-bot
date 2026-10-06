@@ -597,87 +597,112 @@ function exportJSON() {
 }
 
 async function exportPNG() {
-  if (typeof html2canvas === 'undefined') {
-    toast('Image export library did not load.', 'warning');
-    return;
-  }
-  if (!state.map || state.points.length === 0) {
+  if (state.points.length === 0) {
     toast('Nothing to export yet.', 'warning');
     return;
   }
   toast('Rendering route image…', 'info');
   try {
-    // Capture the live map. Tile cache uses blob: URLs which html2canvas
-    // cannot read, so swap tiles to HTTP URLs on the live map first,
-    // wait for them to paint, capture, then swap back.
-    const mapEl = document.getElementById('fm-map');
-    const tiles = Array.from(mapEl.querySelectorAll('img.leaflet-tile'));
-    const swapped = [];
-    for (const img of tiles) {
-      const httpUrl = img.getAttribute('data-tile-url');
-      if (httpUrl && img.src.startsWith('blob:')) {
-        swapped.push([img, img.src]);
-        img.src = httpUrl;
-      }
-    }
-    if (swapped.length) await new Promise((r) => setTimeout(r, 900));
-    let mapCanvas;
-    try {
-      mapCanvas = await html2canvas(mapEl, {
-        useCORS: true, backgroundColor: '#0e1628', logging: false,
-      });
-    } finally {
-      for (const [img, blobUrl] of swapped) { img.src = blobUrl; }
-    }
-    // Build final image: map on top, breakdown bar below
+    // Route bounds with padding
+    const lats = state.points.map((p) => p.lat);
+    const lngs = state.points.map((p) => p.lng);
+    let minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    let minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const padLat = Math.max((maxLat - minLat) * 0.25, 0.0008);
+    const padLng = Math.max((maxLng - minLng) * 0.25, 0.0008);
+    minLat -= padLat; maxLat += padLat;
+    minLng -= padLng; maxLng += padLng;
+
+    // Static satellite image from Esri (reliable, no html2canvas tile issues)
+    const W = 1200;
+    const H = 900;
+    const exportUrl =
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export' +
+      '?bbox=' + minLng + ',' + minLat + ',' + maxLng + ',' + maxLat +
+      '&bboxSR=4326&imageSR=4326&size=' + W + ',' + H + '&format=png&f=image';
+
+    const bg = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const timer = setTimeout(() => reject(new Error('bg timeout')), 15000);
+      img.onload = () => { clearTimeout(timer); resolve(img); };
+      img.onerror = () => { clearTimeout(timer); reject(new Error('bg load')); };
+      img.src = exportUrl;
+    });
+
+    // Project lat/lng to canvas pixels (equirectangular is fine for small areas)
+    const px = (lng) => ((lng - minLng) / (maxLng - minLng)) * W;
+    const py = (lat) => H - ((lat - minLat) / (maxLat - minLat)) * H;
+
     const tots = typeTotals();
     const grand = grandTotal();
     const activeTypes = TYPE_ORDER.filter((k) => (tots[k] || 0) > 0);
-    const barH = 120 + activeTypes.length * 44;
-    const W = mapCanvas.width;
-    const H = mapCanvas.height + barH;
+    const barH = 150 + activeTypes.length * 52;
     const out = document.createElement('canvas');
-    out.width = W; out.height = H;
+    out.width = W; out.height = H + barH;
     const ctx = out.getContext('2d');
-    ctx.fillStyle = '#0B1120';
-    ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(mapCanvas, 0, 0);
-    const bx = 0, by = mapCanvas.height, bw = W, bh = barH;
+    ctx.drawImage(bg, 0, 0, W, H);
+
+    // route segments
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 1; i < state.points.length; i++) {
+      const a = state.points[i - 1], b = state.points[i];
+      const t = TYPES[b.type] || TYPES.aerial;
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = 10;
+      if (t.dash) ctx.setLineDash(t.dash.split(' ').map(Number).map((n) => n * 3));
+      else ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(px(a.lng), py(a.lat));
+      ctx.lineTo(px(b.lng), py(b.lat));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // points
+    for (const p of state.points) {
+      const t = TYPES[p.type] || TYPES.aerial;
+      const x = px(p.lng), y = py(p.lat);
+      ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2);
+      ctx.fillStyle = t.color; ctx.fill();
+      ctx.lineWidth = 6; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+      // point number
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 26px system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(p.n), x, y - 38);
+    }
+
+    // totals bar
+    const by = H;
     ctx.fillStyle = '#101a30';
-    ctx.fillRect(bx, by, bw, bh);
-    const scale = W / 750;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    // grand total
+    ctx.fillRect(0, by, W, barH);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 ' + Math.round(38 * scale) + 'px system-ui, sans-serif';
-    ctx.fillText('TOTAL  ' + grand.toFixed(1) + ' ft', 24 * scale, by + 36 * scale);
+    ctx.font = '900 54px system-ui, sans-serif';
+    ctx.fillText('TOTAL  ' + grand.toFixed(1) + ' ft', 30, by + 48);
     ctx.fillStyle = '#9fb2d1';
-    ctx.font = '400 ' + Math.round(18 * scale) + 'px system-ui, sans-serif';
+    ctx.font = '400 24px system-ui, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(new Date().toLocaleString(), bw - 24 * scale, by + 36 * scale);
+    ctx.fillText(new Date().toLocaleString(), W - 30, by + 48);
     ctx.textAlign = 'left';
-    // per-type breakdown, one row each
-    let ry = by + 78 * scale;
+    let ry = by + 112;
     for (const k of activeTypes) {
       const t = TYPES[k];
-      const v = tots[k];
-      // color dot
       ctx.fillStyle = t.color;
-      ctx.beginPath();
-      ctx.arc(36 * scale, ry, 12 * scale, 0, Math.PI * 2);
-      ctx.fill();
-      // label + footage
+      ctx.beginPath(); ctx.arc(48, ry, 16, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#e6edf7';
-      ctx.font = '800 ' + Math.round(26 * scale) + 'px system-ui, sans-serif';
-      ctx.fillText(t.label.toUpperCase(), 58 * scale, ry);
+      ctx.font = '800 34px system-ui, sans-serif';
+      ctx.fillText(t.label.toUpperCase(), 78, ry);
       ctx.fillStyle = '#ffffff';
-      ctx.font = '900 ' + Math.round(26 * scale) + 'px system-ui, sans-serif';
+      ctx.font = '900 34px system-ui, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(v.toFixed(1) + ' ft', bw - 24 * scale, ry);
+      ctx.fillText(tots[k].toFixed(1) + ' ft', W - 30, ry);
       ctx.textAlign = 'left';
-      ry += 44 * scale;
+      ry += 52;
     }
+
     out.toBlob((blob) => {
       if (blob) {
         download('mercury-fieldmap-' + (state.currentId || uuid()).slice(0, 8) + '.png', blob);
@@ -685,7 +710,7 @@ async function exportPNG() {
       } else toast('Could not render the image.', 'danger');
     }, 'image/png');
   } catch (e) {
-    toast('Image export failed.', 'danger');
+    toast('Image export failed — check connection.', 'danger');
   }
 }
 

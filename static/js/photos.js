@@ -184,15 +184,7 @@ function formatStampDate(date) {
  * stamp = { takenAt: Date, address: {street, cityLine} | null,
  *           coords: {latitude, longitude} | null } */
 function stampPhoto(ctx, width, height, stamp) {
-  const lines = [formatStampDate(stamp.takenAt), ''];
-  if (stamp.address && (stamp.address.street || stamp.address.cityLine)) {
-    if (stamp.address.street) lines.push(stamp.address.street);
-    if (stamp.address.cityLine) lines.push(stamp.address.cityLine);
-  } else if (stamp.coords) {
-    lines.push(`${stamp.coords.latitude.toFixed(5)}, ${stamp.coords.longitude.toFixed(5)}`);
-  } else {
-    lines.push('location unavailable');
-  }
+  const lines = [formatStampDate(stamp.takenAt)];
 
   const pad = Math.max(12, Math.round(width * 0.025));
   let size = Math.max(15, Math.round(width / 40));
@@ -261,29 +253,12 @@ els.button.addEventListener('click', async () => {
   outputs = [];
 
   try {
-    // Location warm-up started when the photos were picked; 8s past the tap
-    // is the hard cap. If no fix is found, stamp date/time only.
-    const coords = await Promise.race([
-      pendingLocate || locateForStamp(),
-      new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
-    ]);
-    pendingLocate = null;
-    let address = null;
-    if (coords) {
-      // One reverse-geocode per batch; falls back to raw lat/lon in the
-      // stamp if the address lookup itself fails.
-      address = await reverseGeocode(coords.latitude, coords.longitude);
-    } else {
-      toast(lastLocateError
-        ? `Location unavailable (${lastLocateError}) — stamp will show the date and time only.`
-        : 'Location unavailable — stamp will show the date and time only.');
-    }
     for (const file of els.files.files) {
       // Exact compress time — file.lastModified is import metadata, not
       // capture time, and stamped a seemingly random time.
       const takenAt = new Date();
       outputs.push(await compress(file, Number(edge), Number(quality),
-        { takenAt, address, coords }));
+        { takenAt }));
     }
   } catch (error) {
     toast(`Could not compress: ${error.message}`, 'danger');

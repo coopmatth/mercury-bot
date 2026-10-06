@@ -3,7 +3,7 @@
 
 import { toast, buzz } from './app.js';
 import { deviceId, uuid } from './store.js';
-import { getNativeLocation } from './native.js';
+import { getNativeLocation, savePhotos } from './native.js';
 
 /* ------------------------------------------------------------ measure types */
 
@@ -703,11 +703,16 @@ async function exportPNG() {
       ry += 52;
     }
 
-    out.toBlob((blob) => {
-      if (blob) {
-        download('mercury-fieldmap-' + (state.currentId || uuid()).slice(0, 8) + '.png', blob);
+    out.toBlob(async (blob) => {
+      if (!blob) { toast('Could not render the image.', 'danger'); return; }
+      const fname = 'mercury-fieldmap-' + (state.currentId || uuid()).slice(0, 8) + '.png';
+      try {
+        await savePhotos([blob]);
+        toast('Route image saved to Photos.', 'success');
+      } catch (e) {
+        download(fname, blob);
         toast('Route image downloaded.', 'success');
-      } else toast('Could not render the image.', 'danger');
+      }
     }, 'image/png');
   } catch (e) {
     toast('Image export failed — check connection.', 'danger');

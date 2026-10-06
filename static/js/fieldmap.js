@@ -220,6 +220,7 @@ function initMap() {
   window.addEventListener('resize', resync);
   window.addEventListener('orientationchange', () => setTimeout(resync, 300));
   map.on('moveend zoomend', updateScale);
+  map.on('click', (e) => { if (state.measuring) addPointAt(e.latlng.lat, e.latlng.lng); });
   updateScale();
   return true;
 }
@@ -320,6 +321,21 @@ function addPoint() {
   refreshTotals();
   updatePointBar();
   buzz(12);
+  toast('Point ' + n + ' added (' + (TYPES[pt.type] ? TYPES[pt.type].label : '') + ')', 'info');
+}
+
+// allow tapping the map directly to drop a point at the tap location
+function addPointAt(lat, lng) {
+  if (!state.measuring || !state.map) return;
+  const n = state.points.length + 1;
+  const prev = state.points[state.points.length - 1];
+  const segFt = prev ? haversineFt(prev, { lat, lng }) : 0;
+  const pt = { id: uuid(), n, type: state.activeType, lat, lng, label: '', ts: Date.now(), segFt };
+  state.points.push(pt);
+  drawRoute();
+  refreshTotals();
+  updatePointBar();
+  buzz(12);
 }
 
 function undoPoint() {
@@ -337,47 +353,36 @@ function undoPoint() {
 }
 
 function drawRoute() {
-  for (const l of state.routeLines) l.remove();
-  for (const m of state.routeMarkers) m.remove();
+  for (const l of state.routeLines) { try { l.remove(); } catch (e) {} }
+  for (const m of state.routeMarkers) { try { m.remove(); } catch (e) {} }
   state.routeLines = [];
   state.routeMarkers = [];
-  if (!state.map || state.points.length === 0) return;
-
-  // group consecutive points by type for colored segments
-  let run = [state.points[0]];
-  const flush = () => {
-    if (run.length < 2) { run = [state.points[state.points.indexOf(run[0]) + 1]].filter(Boolean); return; }
-    const t = TYPES[run[0].type] || TYPES.aerial;
-    const line = L.polyline(run.map((p) => [p.lat, p.lng]), {
-      color: t.color, weight: 5, opacity: 0.95,
-      dashArray: t.dash || null, lineCap: 'round',
-    }).addTo(state.map);
-    state.routeLines.push(line);
-    const last = run[run.length - 1];
-    run = [last];
-  };
+  if (!state.map || !state.points.length) return;
+  // segments: one polyline per point-pair, colored by the segment type
   for (let i = 1; i < state.points.length; i++) {
-    if (state.points[i].type === run[run.length - 1].type) run.push(state.points[i]);
-    else { flush(); run.push(state.points[i]); }
+    const a = state.points[i - 1], b = state.points[i];
+    const t = TYPES[b.type] || TYPES.aerial;
+    try {
+      state.routeLines.push(
+        L.polyline([[a.lat, a.lng], [b.lat, b.lng]], {
+          color: t.color, weight: 6, opacity: 1,
+          dashArray: t.dash || undefined, lineCap: 'round', lineJoin: 'round',
+        }).addTo(state.map)
+      );
+    } catch (e) {}
   }
-  if (run.length >= 2) {
-    const t = TYPES[run[0].type] || TYPES.aerial;
-    state.routeLines.push(L.polyline(run.map((p) => [p.lat, p.lng]), {
-      color: t.color, weight: 5, opacity: 0.95,
-      dashArray: t.dash || null, lineCap: 'round',
-    }).addTo(state.map));
-  }
-
-  // point dots
+  // points: big visible dots with white halo
   for (const p of state.points) {
     const t = TYPES[p.type] || TYPES.aerial;
-    const m = L.circleMarker([p.lat, p.lng], {
-      radius: 6, color: '#fff', weight: 2, fillColor: t.color, fillOpacity: 1,
-    }).addTo(state.map).bindTooltip(
-      (p.label || 'Point ' + p.n) + (p.segFt ? ' · ' + p.segFt.toFixed(1) + ' ft' : ''),
-      { permanent: false, direction: 'top' }
-    );
-    state.routeMarkers.push(m);
+    try {
+      const halo = L.circleMarker([p.lat, p.lng], {
+        radius: 11, color: t.color, weight: 4, fillOpacity: 0, interactive: false,
+      }).addTo(state.map);
+      const dot = L.circleMarker([p.lat, p.lng], {
+        radius: 7, color: '#ffffff', weight: 3, fillColor: t.color, fillOpacity: 1,
+      }).addTo(state.map);
+      state.routeMarkers.push(halo, dot);
+    } catch (e) {}
   }
 }
 

@@ -267,15 +267,6 @@ document.addEventListener('click', async (event) => {
   try {
     // Page cache: serve from memory if we've been here before
     if (!window._pageCache) window._pageCache = new Map();
-
-// Register service worker for offline/PWA support (Safari PWA, not Capacitor)
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
-      .then((reg) => console.log('SW registered:', reg.scope))
-      .catch((err) => console.log('SW registration failed:', err));
-  });
-}
     let html;
     const skipCache = targetUrl.includes("/fieldmap");
     if (!skipCache && window._pageCache.has(targetUrl)) {

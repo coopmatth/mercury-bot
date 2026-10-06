@@ -97,19 +97,6 @@ def scanner_page():
     return render_template("scanner.html", scans=list_scans(25))
 
 
-@bp.get("/sw.js")
-def service_worker():
-    resp = send_from_directory("static", "sw.js")
-    resp.headers["Service-Worker-Allowed"] = "/"
-    resp.headers["Cache-Control"] = "no-cache"
-    return resp
-
-
-@bp.get("/manifest.json")
-def manifest():
-    return send_from_directory("static", "manifest.json")
-
-
 @bp.get("/fieldmap")
 def fieldmap_page():
     return render_template("fieldmap.html")

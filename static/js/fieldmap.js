@@ -79,6 +79,11 @@ function initMap() {
   map.on('click', onMapClick);
   map.on('dblclick', finishDrawing);
   state.map = map;
+  const resync = () => { try { map.invalidateSize(); } catch (e) {} };
+  setTimeout(resync, 120);
+  setTimeout(resync, 600);
+  window.addEventListener('resize', resync);
+  window.addEventListener('orientationchange', function() { setTimeout(resync, 300); });
   return true;
 }
 
@@ -111,7 +116,8 @@ function setTool(tool) {
 
 toolbar.addEventListener('click', (event) => {
   const btn = event.target.closest('[data-tool]');
-  if (!btn || !state.map) return;
+  if (!btn) return;
+  if (!state.map) { toast('Map is still loading - try again in a second.', 'warning'); return; }
   buzz();
   setTool(btn.dataset.tool);
 });
@@ -666,9 +672,19 @@ document.getElementById('fm-export-png').addEventListener('click', async () => {
 
 /* ------------------------------------------------------------ boot */
 
-if (initMap()) {
-  loadSaved();
-  refreshTotals();
+let _booted = false;
+function boot() {
+  if (_booted) return;
+  _booted = true;
+  if (initMap()) {
+    loadSaved();
+    refreshTotals();
+  } else {
+    loadSaved();
+  }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
 } else {
-  loadSaved();
+  boot();
 }

@@ -8,14 +8,20 @@
       crossorigin="">
 <style>
   #fm-map {
+    height: 420px;
     height: 52vh;
     min-height: 320px;
+    max-height: 600px;
+    position: relative;
+    touch-action: pan-x pan-y;
+    isolation: isolate;
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid var(--line);
     background: #0e1628;
     z-index: 0;
   }
+  #fm-map .leaflet-container { height: 100% !important; width: 100% !important; }
   #fm-map.offline {
     display: grid;
     place-items: center;

@@ -22,6 +22,7 @@
               data-confirm="Clear this device's local copy and re-download everything from the server? Anything still waiting to sync will be lost.">
         Reset local data
       </button>
+      <button class="btn btn-outline btn-block" id="clear-cache-btn">Clear cache & reload</button>
     </div>
   </div>
 </div>
@@ -392,6 +393,22 @@
     toast('Local data cleared. Re-syncing from the server…', 'warning');
     await sync.syncNow();
     window.location.reload();
+  });
+
+  document.getElementById('clear-cache-btn').addEventListener('click', async () => {
+    if (!confirm('Clear cached map tiles and force fresh code? Your jobs are safe.')) return;
+    const btn = document.getElementById('clear-cache-btn');
+    btn.disabled = true; btn.textContent = 'Clearing...';
+    try { 
+      const dbs = await indexedDB.databases();
+      for (const db of dbs) if (db.name && db.name.includes('tilecache')) indexedDB.deleteDatabase(db.name);
+    } catch(e) {}
+    try {
+      if ('caches' in window) { const ks = await caches.keys(); for (const k of ks) await caches.delete(k); }
+    } catch(e) {}
+    const url = new URL(window.location.href);
+    url.searchParams.set('_fresh', Date.now().toString());
+    window.location.href = url.toString();
   });
 </script>
 {% endblock %}

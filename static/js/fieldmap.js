@@ -921,12 +921,23 @@ let _booted = false;
 function boot() {
   if (_booted) return;
   _booted = true;
-  renderTypes();
-  if (initMap()) {
-    wire();
-    locate(false);
-  } else {
-    wire();
+  try {
+    renderTypes();
+  } catch (e) {
+    console.error('renderTypes failed:', e);
+  }
+  try {
+    if (initMap()) {
+      wire();
+      locate(false);
+    } else {
+      wire();
+    }
+  } catch (e) {
+    console.error('Map init failed:', e);
+    const el = document.getElementById('fm-map');
+    if (el) el.innerHTML = '<div style="display:grid;place-items:center;height:100%;color:#9fb2d1;text-align:center;padding:24px"><div><div style="font-size:30px">\u26a0\ufe0f</div><h3>Map failed to start</h3><p style="font-size:12px;opacity:.7">' + String(e.message || e).slice(0, 120) + '</p><button onclick="location.reload()" style="margin-top:12px;padding:10px 20px;border-radius:10px;border:1px solid #243049;background:#141d33;color:#e6edf7;">Reload</button></div></div>';
+    try { wire(); } catch (e2) {}
   }
 }
 if (document.readyState === 'loading') {

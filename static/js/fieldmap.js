@@ -303,7 +303,21 @@ function tileCacheKey(url) {
   return url;
 }
 
-var CachedTileLayer = L.TileLayer.extend({
+var CachedTileLayer = null; // initialized lazily in initMap()
+
+/* ------------------------------------------------------------ map init */
+
+function initMap() {
+  if (typeof L === 'undefined') {
+    document.getElementById('fm-map').innerHTML =
+      '<div style="display:grid;place-items:center;height:100%;color:#9fb2d1;text-align:center;padding:24px">' +
+      '<div><div style="font-size:30px">🛰</div><h3>Map needs a connection</h3>' +
+      '<p>The map library could not load.</p></div></div>';
+    return false;
+  }
+  // Define CachedTileLayer now that L is confirmed available
+  if (!CachedTileLayer) {
+CachedTileLayer = L.TileLayer.extend({
   createTile(coords, done) {
     const tile = document.createElement('img');
     L.DomUtil.addClass(tile, 'leaflet-tile');
@@ -354,16 +368,6 @@ var CachedTileLayer = L.TileLayer.extend({
     L.TileLayer.prototype._removeTile.call(this, key);
   },
 });
-
-/* ------------------------------------------------------------ map init */
-
-function initMap() {
-  if (typeof L === 'undefined') {
-    document.getElementById('fm-map').innerHTML =
-      '<div style="display:grid;place-items:center;height:100%;color:#9fb2d1;text-align:center;padding:24px">' +
-      '<div><div style="font-size:30px">🛰</div><h3>Map needs a connection</h3>' +
-      '<p>The map library could not load.</p></div></div>';
-    return false;
   }
   const sat = new CachedTileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -960,32 +964,6 @@ function initSearch() {
 
 /* ------------------------------------------------------------ tools sheet */
 
-function renderSavedList() {
-  const host = document.getElementById('fm-saved-list');
-  const all = loadAll();
-  host.innerHTML = all.length ? '<h3>SAVED MAPS</h3>' : '<p style="color:#9fb2d1;font-size:13px">No saved maps yet.</p>';
-  all.slice(0, 20).forEach((m) => {
-    const d = document.createElement('div');
-    d.className = 'fm-pt';
-    const when = new Date(m.ts).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    d.innerHTML = '<div class="ph"><span>' + (m.grand || 0).toFixed(1) + ' ft · ' + (m.points || []).length + ' pts</span><span style="color:#9fb2d1;font-weight:400">' + when + '</span></div>' +
-      '<div class="fm-row" style="margin:8px 0 0"><button class="fm-btn" data-open="' + m.id + '">Open</button>' +
-      '<button class="fm-btn warn" data-del="' + m.id + '">Delete</button></div>';
-    host.appendChild(d);
-  });
-  host.querySelectorAll('[data-open]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const m = loadAll().find((x) => x.id === b.dataset.open);
-      if (m) openMap(m);
-    }));
-  host.querySelectorAll('[data-del]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const all2 = loadAll().filter((x) => x.id !== b.dataset.del);
-      localStorage.setItem(LS_KEY, JSON.stringify(all2));
-      fetch('/api/fieldmaps/' + b.dataset.del, { method: 'DELETE' }).catch(() => {});
-      renderSavedList();
-    }));
-}
 
 /* ------------------------------------------------------------ wire up */
 

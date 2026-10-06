@@ -126,7 +126,8 @@ form.addEventListener('submit', async (event) => {
   // One stable ID per form instance: a double-submit upserts the same row.
   if (!form.id.value) form.id.value = crypto.randomUUID();
   try {
-    await saveJob({
+    buzz([12, 40, 12]);
+    const saved = await saveJob({
       id: form.id.value || undefined,
       created_at: form.created_at.value || undefined,
       work_date: form.work_date.value,
@@ -137,23 +138,35 @@ form.addEventListener('submit', async (event) => {
       needs_bore: document.getElementById('needs_bore').checked ? 1 : 0,
       items,
     });
-    buzz([12, 40, 12]);
+    // Hand off to the photo compressor: which photos this job needs.
+    const { total: photoCount, detail } = requiredPhotos(items);
+    const photoList = [];
+    detail.forEach((d) => {
+      d.photos.forEach((p) => photoList.push({ code: d.code, name: p }));
+    });
+    const workOrderId = (form.order_number.value.trim()
+      || (saved && saved.id ? String(saved.id).slice(0, 8) : ''));
+    sessionStorage.setItem(
+      'mercury:photo-job',
+      JSON.stringify({
+        jobId: saved?.id || form.id.value,
+        workOrderId,
+        address: form.address.value.trim(),
+        total: money(jobTotal(items)),
+        photoCount,
+        photos: photoList,
+      }),
+    );
     sessionStorage.setItem(
       'mercury:flash',
       JSON.stringify({
-        message: (() => {
-          const { total: photoCount } = requiredPhotos(items);
-          const photoMsg = photoCount
-            ? ` · You need ${photoCount} photo${photoCount === 1 ? '' : 's'} for these tasks to be paid`
-            : '';
-          return navigator.onLine
-            ? `Job saved · ${money(jobTotal(items))}${photoMsg}`
-            : `Saved offline · ${money(jobTotal(items))}${photoMsg} — will sync automatically`;
-        })(),
-        kind: navigator.onLine ? 'success' : 'warning',
+        message: photoCount
+          ? `Job saved · ${money(jobTotal(items))} · Take ${photoCount} photo${photoCount === 1 ? '' : 's'} below`
+          : `Job saved · ${money(jobTotal(items))}`,
+        kind: 'success',
       }),
     );
-    routerNav('/jobs');
+    routerNav('/photos');
   } catch (error) {
     button.disabled = false;
     button.textContent = 'Save job';

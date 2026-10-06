@@ -518,3 +518,7 @@ main.container.nav-fade {
   opacity: 0;
   transform: translateY(6px);
 }
+
+.checklist { margin: 0; padding-left: 1.4em; }
+.checklist li { margin: 8px 0; font-size: 14px; }
+.checklist .ck-code { display: inline-block; min-width: 38px; font-weight: 800; color: var(--accent, #38bdf8); margin-right: 8px; }

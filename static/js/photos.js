@@ -29,6 +29,41 @@ const els = {
 
 let outputs = [];
 
+/* Job handoff: the Log-a-job form stashes the just-saved job here so the
+   compressor can show exactly which photos that work order needs. */
+let photoJob = null;
+try {
+  const raw = sessionStorage.getItem('mercury:photo-job');
+  if (raw) {
+    photoJob = JSON.parse(raw);
+    sessionStorage.removeItem('mercury:photo-job');
+  }
+} catch { /* malformed — ignore */ }
+
+if (photoJob && photoJob.photos && photoJob.photos.length) {
+  const card = document.getElementById('photo-checklist');
+  const title = document.getElementById('checklist-title');
+  const meta = document.getElementById('checklist-meta');
+  const list = document.getElementById('checklist-items');
+  if (card && list) {
+    title.textContent = `Photos needed — ${photoJob.photoCount}`;
+    meta.textContent = [
+      photoJob.workOrderId ? `WO ${photoJob.workOrderId}` : null,
+      photoJob.address || null,
+      photoJob.total || null,
+    ].filter(Boolean).join(' · ');
+    list.innerHTML = '';
+    photoJob.photos.forEach((p) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="ck-code"></span><span class="ck-name"></span>';
+      li.querySelector('.ck-code').textContent = p.code;
+      li.querySelector('.ck-name').textContent = p.name;
+      list.appendChild(li);
+    });
+    card.classList.remove('hidden');
+  }
+}
+
 const humanSize = (bytes) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -185,6 +220,7 @@ function formatStampDate(date) {
  *           coords: {latitude, longitude} | null } */
 function stampPhoto(ctx, width, height, stamp) {
   const lines = [formatStampDate(stamp.takenAt)];
+  if (stamp.workOrderId) lines.push(`WO ${stamp.workOrderId}`);
 
   const pad = Math.max(12, Math.round(width * 0.025));
   let size = Math.max(15, Math.round(width / 40));
@@ -258,7 +294,7 @@ els.button.addEventListener('click', async () => {
       // capture time, and stamped a seemingly random time.
       const takenAt = new Date();
       outputs.push(await compress(file, Number(edge), Number(quality),
-        { takenAt }));
+        { takenAt, workOrderId: photoJob?.workOrderId || null }));
     }
   } catch (error) {
     toast(`Could not compress: ${error.message}`, 'danger');

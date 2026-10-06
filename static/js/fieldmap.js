@@ -7,7 +7,7 @@ import { getNativeLocation, savePhotos } from './native.js';
 
 /* ------------------------------------------------------------ measure types */
 
-const TYPES = {
+var TYPES = {
   aerial:  { label: 'Aerial',       color: '#38bdf8', dash: null,        rate: 'overhead' },
   burial:  { label: 'Burial',       color: '#fb923c', dash: '2 6',       rate: 'bury' },
   bore:    { label: 'Bore',         color: '#c084fc', dash: null,        rate: 'bore' },
@@ -15,11 +15,11 @@ const TYPES = {
   strand:  { label: 'Strand',       color: '#f472b6', dash: '6 3',       rate: null },
   lashing: { label: 'Lashing',      color: '#facc15', dash: '8 4 2 4',   rate: null },
 };
-const TYPE_ORDER = ['aerial', 'burial', 'bore', 'conduit', 'strand', 'lashing'];
+var TYPE_ORDER = ['aerial', 'burial', 'bore', 'conduit', 'strand', 'lashing'];
 
 /* ---------------- Custom measurement types ---------------- */
-const CUSTOM_KEY = 'mercury:fieldmap:custom-types';
-let customDash = null; // null = solid, '1 6' = dots
+var CUSTOM_KEY = 'mercury:fieldmap:custom-types';
+var customDash = null; // null = solid, '1 6' = dots
 
 function loadCustomTypes() {
   try {
@@ -41,7 +41,7 @@ function saveCustomTypes() {
   } catch (e) { /* ignore */ }
 }
 
-const CUSTOM_SWATCHES = ['#f97316', '#ef4444', '#ec4899', '#a855f7', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#84cc16', '#eab308', '#facc15', '#ffffff'];
+var CUSTOM_SWATCHES = ['#f97316', '#ef4444', '#ec4899', '#a855f7', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#84cc16', '#eab308', '#facc15', '#ffffff'];
 
 function openCustomPanel() {
   document.getElementById('fm-custom-overlay').hidden = false;
@@ -88,7 +88,9 @@ function createCustomType() {
 }
 
 function initCustomPanel() {
-  document.getElementById('fm-custom-close').addEventListener('click', () => {
+  const closeBtn = document.getElementById('fm-custom-close');
+  if (!closeBtn) return;
+  closeBtn.addEventListener('click', () => {
     document.getElementById('fm-custom-overlay').hidden = true;
   });
   document.getElementById('fm-custom-solid').addEventListener('click', () => {
@@ -161,7 +163,9 @@ function renderSavedList() {
 }
 
 function initSavedFolder() {
-  document.getElementById('fm-saved-btn').addEventListener('click', () => {
+  const savedBtn = document.getElementById('fm-saved-btn');
+  if (!savedBtn) return;
+  savedBtn.addEventListener('click', () => {
     renderSavedList();
     document.getElementById('fm-saved-overlay').hidden = false;
     buzz(8);
@@ -172,16 +176,16 @@ function initSavedFolder() {
 }
 
 /* Mercury rate-card mapping (see 2026-10-03 9-item card) */
-const RATE_MAP = {
+var RATE_MAP = {
   aerial:  { name: 'Hang Overhead Drop',        unit: 'ft',  price: 0.40 },
   burial:  { name: 'Direct Bury Flat Drop',     unit: 'ft',  price: 0.60 },
   bore:    { name: 'Sidewalk Bore',             unit: 'each', price: 25 },
   conduit: { name: 'Pull Through Existing Conduit', unit: 'ft', price: 0.50 },
 };
 
-const LS_KEY = 'mercury:fieldmaps:v2';
+var LS_KEY = 'mercury:fieldmaps:v2';
 
-const state = {
+var state = {
   map: null,
   layers: {},
   activeType: 'aerial',
@@ -224,7 +228,7 @@ function grandTotal() {
 
 /* ------------------------------------------------------------ tile cache (IndexedDB) */
 
-const TileCache = {
+var TileCache = {
   DB_NAME: 'mercury:tilecache',
   MAX_TILES: 600,
   db: null,
@@ -299,7 +303,7 @@ function tileCacheKey(url) {
   return url;
 }
 
-const CachedTileLayer = L.TileLayer.extend({
+var CachedTileLayer = L.TileLayer.extend({
   createTile(coords, done) {
     const tile = document.createElement('img');
     L.DomUtil.addClass(tile, 'leaflet-tile');
@@ -415,6 +419,7 @@ function renderTypes() {
   host.innerHTML = '';
   for (const key of TYPE_ORDER) {
     const t = TYPES[key];
+    if (!t || !t.label) continue;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'fm-type' + (state.activeType === key ? ' active' : '');
@@ -929,7 +934,7 @@ async function sendToJob() {
 
 /* ------------------------------------------------------------ search */
 
-let searchTimer = null;
+var searchTimer = null;
 function initSearch() {
   const input = document.getElementById('fm-search');
   input.addEventListener('input', () => {
@@ -1077,7 +1082,7 @@ function wire() {
 
 /* ------------------------------------------------------------ boot */
 
-let _booted = false;
+var _booted = false;
 function boot() {
   loadCustomTypes();
   // Request persistent storage so the browser won't evict our tiles/jobs

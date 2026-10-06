@@ -607,22 +607,28 @@ async function exportPNG() {
   }
   toast('Rendering route image…', 'info');
   try {
-    // Capture the live map (tiles + route + markers are all drawn there).
-    // Tile cache uses blob: URLs which html2canvas cannot read, so swap
-    // them back to HTTP URLs in the cloned document before rendering.
-    const mapCanvas = await html2canvas(document.getElementById('fm-map'), {
-      useCORS: true, backgroundColor: '#0e1628', logging: false,
-      onclone: (clonedDoc) => {
-        const imgs = clonedDoc.querySelectorAll('#fm-map img.leaflet-tile');
-        for (const img of imgs) {
-          const httpUrl = img.getAttribute('data-tile-url');
-          if (httpUrl && img.src.startsWith('blob:')) {
-            img.src = httpUrl;
-            img.removeAttribute('srcset');
-          }
-        }
-      },
-    });
+    // Capture the live map. Tile cache uses blob: URLs which html2canvas
+    // cannot read, so swap tiles to HTTP URLs on the live map first,
+    // wait for them to paint, capture, then swap back.
+    const mapEl = document.getElementById('fm-map');
+    const tiles = Array.from(mapEl.querySelectorAll('img.leaflet-tile'));
+    const swapped = [];
+    for (const img of tiles) {
+      const httpUrl = img.getAttribute('data-tile-url');
+      if (httpUrl && img.src.startsWith('blob:')) {
+        swapped.push([img, img.src]);
+        img.src = httpUrl;
+      }
+    }
+    if (swapped.length) await new Promise((r) => setTimeout(r, 900));
+    let mapCanvas;
+    try {
+      mapCanvas = await html2canvas(mapEl, {
+        useCORS: true, backgroundColor: '#0e1628', logging: false,
+      });
+    } finally {
+      for (const [img, blobUrl] of swapped) { img.src = blobUrl; }
+    }
     // Build final image: map on top, breakdown bar below
     const tots = typeTotals();
     const grand = grandTotal();

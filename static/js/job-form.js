@@ -103,8 +103,15 @@ for (const row of rows) {
 
 refresh();
 
+let saveInFlight = false;
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  // Guard against double-submit (double-tap, router re-execution): ignore
+  // while a save is already running, and reuse one stable ID so a retry
+  // upserts the same record instead of creating a duplicate.
+  if (saveInFlight) return;
+  saveInFlight = true;
   const button = document.getElementById('save-btn');
   const items = collect();
 
@@ -116,6 +123,8 @@ form.addEventListener('submit', async (event) => {
   button.disabled = true;
   button.textContent = 'Saving…';
 
+  // One stable ID per form instance: a double-submit upserts the same row.
+  if (!form.id.value) form.id.value = crypto.randomUUID();
   try {
     await saveJob({
       id: form.id.value || undefined,
@@ -148,6 +157,7 @@ form.addEventListener('submit', async (event) => {
   } catch (error) {
     button.disabled = false;
     button.textContent = 'Save job';
+    saveInFlight = false;
     toast(`Could not save: ${error.message}`, 'danger');
   }
 });

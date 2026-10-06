@@ -153,27 +153,36 @@ const CachedTileLayer = L.TileLayer.extend({
     tile.setAttribute('role', 'presentation');
     const url = this.getTileUrl(coords);
     const key = tileCacheKey(url);
-    const show = (blob) => {
-      const ou = URL.createObjectURL(blob);
-      tile._objectUrl = ou;
+    const directLoad = () => {
       tile.onload = () => done(null, tile);
-      tile.onerror = () => done(new Error('tile decode'), tile);
-      tile.src = ou;
+      tile.onerror = () => done(new Error('tile load'), tile);
+      tile.src = url;
     };
-    TileCache.get(key).then((blob) => {
-      if (blob) show(blob);
-      else {
+    const show = (blob) => {
+      try {
+        const ou = URL.createObjectURL(blob);
+        tile._objectUrl = ou;
+        tile.onload = () => done(null, tile);
+        tile.onerror = directLoad;
+        tile.src = ou;
+      } catch (e) { directLoad(); }
+    };
+    const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+    // Cache lookup must never hang the tile — race against 1.2s
+    Promise.race([TileCache.get(key), timeout(1200)]).then((blob) => {
+      if (blob) { show(blob); return; }
+      // Fetch+cache, race against 8s, fall back to direct img on any failure
+      Promise.race([
         fetch(url, { mode: 'cors', credentials: 'omit' }).then((r) => {
           if (!r.ok) throw new Error('http ' + r.status);
           return r.blob();
-        }).then((blob) => { TileCache.put(key, blob); show(blob); })
-        .catch(() => {
-          tile.onload = () => done(null, tile);
-          tile.onerror = () => done(new Error('tile load'), tile);
-          tile.src = url;
-        });
-      }
-    });
+        }),
+        timeout(8000),
+      ]).then((blob) => {
+        TileCache.put(key, blob).catch(() => {});
+        show(blob);
+      }).catch(directLoad);
+    }).catch(directLoad);
     return tile;
   },
   _removeTile(key) {

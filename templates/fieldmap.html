@@ -3,9 +3,7 @@
 {% block title %}Field Map · Mercury{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin="">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css?v={{ js_version }}">
 <style>
   #fm-map {
     height: 420px;
@@ -206,9 +204,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""></script>
+<script src="/static/vendor/leaflet/leaflet.js?v={{ js_version }}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
         crossorigin=""></script>
 <script type="module" src="/static/js/fieldmap.js?v={{ js_version }}"></script>

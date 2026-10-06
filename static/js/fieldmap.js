@@ -52,7 +52,146 @@ function routeFootage(points) {
   return ft;
 }
 
+
+/* ------------------------------------------------------------ tile cache
+   Map tiles are cached in IndexedDB (on this device) so areas Matt has
+   already visited load instantly instead of re-downloading every time.
+   LRU-evicted at MAX_TILES. */
+
+const TileCache = {
+  DB_NAME: 'mercury:tilecache',
+  STORE: 'tiles',
+  MAX_TILES: 600,
+  db: null,
+
+  open() {
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((resolve, reject) => {
+      let req;
+      try {
+        req = indexedDB.open(this.DB_NAME, 1);
+      } catch (e) { reject(e); return; }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('tiles')) {
+          const s = db.createObjectStore('tiles', { keyPath: 'key' });
+          s.createIndex('ts', 'ts', { unique: false });
+        }
+      };
+      req.onsuccess = () => { TileCache.db = req.result; resolve(req.result); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  _tx(mode, fn) {
+    return this.open().then((db) => new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction('tiles', mode);
+        const req = fn(tx.objectStore('tiles'));
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      } catch (e) { reject(e); }
+    }));
+  },
+
+  get(key) {
+    return this._tx('readonly', (s) => s.get(key)).then((rec) => {
+      if (rec && rec.blob) {
+        this._tx('readwrite', (s) => s.put({ key: key, blob: rec.blob, ts: Date.now() })).catch(() => {});
+        return rec.blob;
+      }
+      return null;
+    }).catch(() => null);
+  },
+
+  put(key, blob) {
+    return this._tx('readwrite', (s) => s.put({ key: key, blob: blob, ts: Date.now() }))
+      .then(() => this._evict()).catch(() => {});
+  },
+
+  _evict() {
+    return this.open().then((db) => new Promise((resolve) => {
+      try {
+        const tx = db.transaction('tiles', 'readwrite');
+        const store = tx.objectStore('tiles');
+        const countReq = store.count();
+        countReq.onsuccess = () => {
+          const over = countReq.result - TileCache.MAX_TILES;
+          if (over <= 0) { resolve(); return; }
+          let deleted = 0;
+          store.index('ts').openCursor().onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor && deleted < over) {
+              cursor.delete(); deleted++; cursor.continue();
+            } else resolve();
+          };
+        };
+        countReq.onerror = () => resolve();
+      } catch (e) { resolve(); }
+    }));
+  },
+};
+
+function tileCacheKey(url) {
+  const m = url.match(/\/(\d+)\/(\d+)\/(\d+)(?:\.\w+)?(?:\?.*)?$/);
+  if (m) {
+    const h = url.match(/^https?:\/\/([^/]+)/);
+    return (h ? h[1] : 'tiles') + '/' + m[1] + '/' + m[2] + '/' + m[3];
+  }
+  return url;
+}
+
+const CachedTileLayer = L.TileLayer.extend({
+  createTile(coords, done) {
+    const tile = document.createElement('img');
+    L.DomUtil.addClass(tile, 'leaflet-tile');
+    tile.alt = '';
+    tile.setAttribute('role', 'presentation');
+    if (this.options.crossOrigin) tile.crossOrigin = 'anonymous';
+
+    const url = this.getTileUrl(coords);
+    const key = tileCacheKey(url);
+
+    const finishFromBlob = (blob) => {
+      const objUrl = URL.createObjectURL(blob);
+      tile._objectUrl = objUrl;
+      tile.onload = () => done(null, tile);
+      tile.onerror = () => done(new Error('tile decode failed'), tile);
+      tile.src = objUrl;
+    };
+
+    TileCache.get(key).then((blob) => {
+      if (blob) {
+        finishFromBlob(blob);
+      } else {
+        fetch(url, { mode: 'cors', credentials: 'omit' }).then((r) => {
+          if (!r.ok) throw new Error('tile http ' + r.status);
+          return r.blob();
+        }).then((blob) => {
+          TileCache.put(key, blob);
+          finishFromBlob(blob);
+        }).catch(() => {
+          tile.onload = () => done(null, tile);
+          tile.onerror = () => done(new Error('tile load failed'), tile);
+          tile.src = url;
+        });
+      }
+    });
+    return tile;
+  },
+
+  _removeTile(key) {
+    const t = this._tiles && this._tiles[key];
+    if (t && t.el && t.el._objectUrl) {
+      try { URL.revokeObjectURL(t.el._objectUrl); } catch (e) {}
+      t.el._objectUrl = null;
+    }
+    L.TileLayer.prototype._removeTile.call(this, key);
+  },
+});
+
 /* ------------------------------------------------------------ map init */
+
 
 function initMap() {
   const el = document.getElementById('fm-map');
@@ -64,10 +203,10 @@ function initMap() {
       '<p>The map library could not load.<br>Your saved maps are still listed below.</p></div>';
     return false;
   }
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const osm = new CachedTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '© OpenStreetMap contributors',
   });
-  const sat = L.tileLayer(
+  const sat = new CachedTileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     { maxZoom: 19, attribution: '© Esri World Imagery' },
   );

@@ -599,15 +599,62 @@ async function exportPNG() {
     toast('Image export library did not load.', 'warning');
     return;
   }
-  const target = document.getElementById('fm-summary-overlay').hidden
-    ? document.getElementById('fm-mapwrap')
-    : document.getElementById('fm-summary-overlay').querySelector('.fm-sheet');
-  toast('Rendering image…', 'info');
+  if (!state.map || state.points.length === 0) {
+    toast('Nothing to export yet.', 'warning');
+    return;
+  }
+  toast('Rendering route image…', 'info');
   try {
-    const canvas = await html2canvas(target, {
-      useCORS: true, backgroundColor: '#0B1120', logging: false,
+    // Capture the live map (tiles + route + markers are all drawn there)
+    const mapCanvas = await html2canvas(document.getElementById('fm-map'), {
+      useCORS: true, backgroundColor: '#0e1628', logging: false,
     });
-    canvas.toBlob((blob) => {
+    // Build final image: map on top, totals bar below
+    const tots = typeTotals();
+    const grand = grandTotal();
+    const barH = 120;
+    const W = mapCanvas.width;
+    const H = mapCanvas.height + barH;
+    const out = document.createElement('canvas');
+    out.width = W; out.height = H;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#0B1120';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(mapCanvas, 0, 0);
+    // totals bar
+    const bx = 0, by = mapCanvas.height, bw = W, bh = barH;
+    ctx.fillStyle = '#101a30';
+    ctx.fillRect(bx, by, bw, bh);
+    const scale = W / 750; // design for ~750px wide
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 ' + Math.round(34 * scale) + 'px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('TOTAL  ' + grand.toFixed(1) + ' ft', 24 * scale, by + 34 * scale);
+    // color-coded per-type strip
+    let x = 24 * scale;
+    const stripY = by + 68 * scale, stripH = 30 * scale;
+    for (const k of TYPE_ORDER) {
+      const v = tots[k] || 0;
+      if (v <= 0) continue;
+      const t = TYPES[k];
+      const segW = Math.max(4, (v / grand) * (bw - 48 * scale));
+      ctx.fillStyle = t.color;
+      ctx.fillRect(x, stripY, segW, stripH);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 ' + Math.round(20 * scale) + 'px system-ui, sans-serif';
+      const label = t.label + ' ' + v.toFixed(0);
+      if (segW > ctx.measureText(label).width + 16) {
+        ctx.fillText(label, x + 8, stripY + stripH / 2);
+      }
+      x += segW + 4;
+    }
+    // date stamp
+    ctx.fillStyle = '#9fb2d1';
+    ctx.font = '400 ' + Math.round(18 * scale) + 'px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(new Date().toLocaleString(), bw - 24 * scale, by + 34 * scale);
+    ctx.textAlign = 'left';
+    out.toBlob((blob) => {
       if (blob) {
         download('mercury-fieldmap-' + (state.currentId || uuid()).slice(0, 8) + '.png', blob);
         toast('Route image downloaded.', 'success');

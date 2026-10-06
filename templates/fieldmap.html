@@ -5,206 +5,256 @@
 {% block head %}
 <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css?v={{ js_version }}">
 <style>
-  #fm-map {
-    height: 340px;
-    min-height: 340px;
-    max-height: 340px;
+  :root {
+    --fm-aerial: #38bdf8;
+    --fm-burial: #fb923c;
+    --fm-bore: #c084fc;
+    --fm-conduit: #4ade80;
+    --fm-strand: #f472b6;
+    --fm-lashing: #facc15;
+    --fm-bg: #0B1120;
+    --fm-panel: #141d33;
+    --fm-line: #243049;
+  }
+  /* Full-height app column inside Mercury content */
+  #fm-app {
+    display: flex; flex-direction: column;
+    height: calc(100dvh - 118px);
+    min-height: 480px;
+    margin: 0 -16px;
+    background: var(--fm-bg);
     position: relative;
-    touch-action: pan-x pan-y;
-    isolation: isolate;
-    border-radius: 14px;
     overflow: hidden;
-    border: 1px solid var(--line);
-    background: #0e1628;
-    z-index: 0;
+  }
+  /* ---- top overlay ---- */
+  #fm-topbar {
+    z-index: 500;
+    padding: 10px 12px 8px;
+    background: linear-gradient(180deg, rgba(11,17,32,.96), rgba(11,17,32,.82));
+    border-bottom: 1px solid var(--fm-line);
+  }
+  #fm-types {
+    display: flex; gap: 8px; overflow-x: auto;
+    padding-bottom: 8px; scrollbar-width: none;
+  }
+  #fm-types::-webkit-scrollbar { display: none; }
+  .fm-type {
+    flex-shrink: 0; border: 2px solid var(--fm-line);
+    background: var(--fm-panel); color: #dbe6f5;
+    border-radius: 12px; padding: 8px 14px;
+    font-weight: 800; font-size: 13px; letter-spacing: .04em;
+  }
+  .fm-type.active { color: #04121e; border-color: transparent; }
+  .fm-type.active[data-type="aerial"]  { background: var(--fm-aerial); }
+  .fm-type.active[data-type="burial"]  { background: var(--fm-burial); }
+  .fm-type.active[data-type="bore"]    { background: var(--fm-bore); }
+  .fm-type.active[data-type="conduit"] { background: var(--fm-conduit); }
+  .fm-type.active[data-type="strand"]  { background: var(--fm-strand); }
+  .fm-type.active[data-type="lashing"] { background: var(--fm-lashing); }
+  #fm-locrow { display: flex; gap: 8px; align-items: center; }
+  #fm-locrow .pill {
+    border: 1px solid var(--fm-line); background: var(--fm-panel);
+    color: #dbe6f5; border-radius: 10px; padding: 7px 10px;
+    font-size: 12px; font-weight: 700; white-space: nowrap;
+  }
+  #fm-search {
+    flex: 1; min-width: 0; background: var(--fm-panel);
+    border: 1px solid var(--fm-line); border-radius: 10px;
+    color: #e6edf7; padding: 8px 10px; font-size: 13px;
+  }
+  #fm-totals {
+    margin-top: 8px; font-size: 12px; color: #9fb2d1;
+    display: flex; gap: 10px; align-items: baseline;
+  }
+  #fm-totals b { color: #fff; font-size: 15px; }
+  /* ---- map ---- */
+  #fm-mapwrap { position: relative; flex: 1; min-height: 0; }
+  #fm-map {
+    position: absolute; inset: 0;
+    background: #0e1628; z-index: 0;
+    touch-action: pan-x pan-y;
   }
   #fm-map .leaflet-container { height: 100% !important; width: 100% !important; }
-  #fm-map.offline {
-    display: grid;
-    place-items: center;
-    text-align: center;
-    padding: 24px;
-    color: var(--text-mute);
-  }
-  /* Dark Leaflet chrome to match Mercury */
-  .leaflet-bar a, .leaflet-bar a:hover {
-    background: #141d33;
-    color: #e6edf7;
-    border-bottom: 1px solid var(--line);
-  }
-  .leaflet-control-attribution {
-    background: rgba(11,17,32,.7) !important;
-    color: #7d8aa5 !important;
-    font-size: 9px;
-  }
+  .leaflet-bar a, .leaflet-bar a:hover { background: #141d33; color: #e6edf7; border-bottom: 1px solid var(--fm-line); }
+  .leaflet-control-attribution { background: rgba(11,17,32,.7) !important; color: #7d8aa5 !important; font-size: 9px; }
   .leaflet-control-attribution a { color: #9fb2d1 !important; }
-  .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-    background: #141d33;
-    color: #e6edf7;
+  #fm-crosshair {
+    position: absolute; left: 50%; top: 50%; z-index: 400;
+    transform: translate(-50%, -50%); pointer-events: none;
+    width: 34px; height: 34px; display: none;
   }
-  .fm-pin {
-    display: grid;
-    place-items: center;
-    width: 30px; height: 30px;
-    border-radius: 50%;
-    font-size: 11px;
-    font-weight: 800;
-    color: #04121e;
-    border: 2px solid rgba(255,255,255,.85);
-    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  #fm-crosshair.on { display: block; }
+  #fm-scale {
+    position: absolute; left: 10px; bottom: 12px; z-index: 400;
+    background: rgba(11,17,32,.85); border: 1px solid var(--fm-line);
+    color: #ffd75e; font-size: 11px; font-weight: 800;
+    padding: 3px 8px; border-radius: 6px; pointer-events: none;
   }
-  .fm-toolbar {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding: 10px 2px;
-    -webkit-overflow-scrolling: touch;
+  /* ---- point bar ---- */
+  #fm-pointbar {
+    z-index: 500; display: flex; gap: 8px; align-items: center;
+    padding: 8px 12px; background: var(--fm-panel);
+    border-top: 1px solid var(--fm-line); font-size: 13px;
   }
-  .fm-toolbar .btn { white-space: nowrap; flex-shrink: 0; }
-  .fm-toolbar .btn.active {
-    background: var(--accent);
-    color: #04121e;
-    border-color: var(--accent);
+  #fm-pointbar[hidden] { display: none; }
+  #fm-point-label { flex: 1; min-width: 0; color: #dbe6f5; font-weight: 700; }
+  #fm-point-label small { display: block; color: #9fb2d1; font-weight: 400; }
+  /* ---- action bar ---- */
+  #fm-actionbar { z-index: 500; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--fm-bg); border-top: 1px solid var(--fm-line); }
+  #fm-start {
+    width: 100%; padding: 15px; border-radius: 14px; border: none;
+    background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+    color: #04121e; font-size: 17px; font-weight: 900; letter-spacing: .08em;
   }
-  .fm-searchrow { display: flex; gap: 8px; margin-bottom: 8px; }
-  .fm-searchrow input { flex: 1; }
-  .fm-results {
-    position: relative;
+  #fm-measuring { display: flex; gap: 8px; }
+  #fm-measuring[hidden] { display: none; }
+  #fm-measuring button {
+    border-radius: 12px; padding: 13px 8px; font-weight: 800; font-size: 14px;
+    border: 1px solid var(--fm-line); background: var(--fm-panel); color: #dbe6f5;
   }
-  .fm-results-list {
-    position: absolute;
-    top: 100%; left: 0; right: 0;
-    z-index: 500;
-    background: #141d33;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    margin-top: 4px;
-    overflow: hidden;
+  #fm-undo, #fm-finish { flex: 1; }
+  #fm-add {
+    flex: 2; border: none !important;
+    background: linear-gradient(135deg, #38bdf8, #0ea5e9) !important;
+    color: #04121e !important;
   }
-  .fm-results-list button {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 10px 12px;
-    background: none;
-    border: none;
-    border-bottom: 1px solid var(--line);
-    color: #e6edf7;
-    font-size: 13px;
+  /* ---- sheets & summary ---- */
+  .fm-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(4,8,18,.72); display: flex;
+    align-items: flex-end; justify-content: center;
   }
-  .fm-results-list button:last-child { border-bottom: none; }
-  .fm-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .fm-total {
-    background: #101828;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 10px 12px;
+  .fm-overlay[hidden] { display: none; }
+  .fm-sheet {
+    width: 100%; max-width: 560px; max-height: 82dvh; overflow-y: auto;
+    background: #101a30; border-radius: 18px 18px 0 0;
+    border: 1px solid var(--fm-line); padding: 16px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
-  .fm-total .k { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: .04em; }
-  .fm-total .v { font-size: 20px; font-weight: 800; color: #e6edf7; }
-  .fm-total .v small { font-size: 12px; font-weight: 600; color: var(--text-mute); }
-  .fm-routes { margin-top: 8px; }
-  .fm-route-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 13px;
+  .fm-sheet h3 { margin: 0 0 12px; font-size: 15px; letter-spacing: .06em; color: #9fb2d1; }
+  .fm-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .fm-btn {
+    flex: 1; border-radius: 12px; padding: 12px 8px;
+    border: 1px solid var(--fm-line); background: var(--fm-panel);
+    color: #e6edf7; font-weight: 700; font-size: 13px;
   }
-  .fm-route-row:last-child { border-bottom: none; }
-  .fm-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
-  .fm-route-row .grow { flex: 1; }
-  .fm-route-row .ft { font-weight: 700; }
-  .fm-del { background: none; border: none; color: #f87171; font-size: 16px; padding: 4px 8px; }
-  .fm-saved-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .fm-saved-row:last-child { border-bottom: none; }
-  .fm-saved-row .grow { flex: 1; }
-  .fm-saved-row .name { font-weight: 700; font-size: 14px; }
-  .fm-saved-row .meta { font-size: 12px; color: var(--text-mute); }
+  .fm-btn.primary { background: linear-gradient(135deg,#38bdf8,#0ea5e9); color: #04121e; border: none; font-weight: 900; }
+  .fm-btn.warn { border-color: #7f2d2d; color: #fca5a5; }
+  /* summary */
+  #fm-summary { align-items: stretch; }
+  #fm-summary .fm-sheet { max-height: 94dvh; border-radius: 0; max-width: 640px; }
+  .fm-sum-title { font-size: 22px; font-weight: 900; letter-spacing: .02em; margin: 4px 0 2px; }
+  .fm-sum-sub { color: #9fb2d1; font-size: 12px; margin-bottom: 12px; }
+  #fm-sum-map { height: 260px; border-radius: 12px; overflow: hidden; border: 1px solid var(--fm-line); position: relative; }
+  .fm-totgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .fm-tot { border-radius: 12px; padding: 10px 12px; background: var(--fm-panel); border: 1px solid var(--fm-line); border-left-width: 5px; }
+  .fm-tot .t { font-size: 11px; color: #9fb2d1; font-weight: 700; letter-spacing: .05em; }
+  .fm-tot .v { font-size: 19px; font-weight: 900; color: #fff; }
+  .fm-tot.total { grid-column: 1 / -1; border-left-color: #38bdf8; }
+  .fm-pt { border: 1px solid var(--fm-line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: var(--fm-panel); }
+  .fm-pt .ph { display: flex; justify-content: space-between; font-weight: 800; font-size: 13px; }
+  .fm-pt .pd { font-size: 11px; color: #9fb2d1; margin-top: 4px; }
+  .fm-pt input { width: 100%; margin-top: 6px; background: #0b1322; border: 1px solid var(--fm-line); border-radius: 8px; color: #e6edf7; padding: 7px 9px; font-size: 13px; }
+  .fm-chip { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 20px; color: #04121e; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-title">
-  <h1>Field Map</h1>
-  <p>Drop pins, trace routes, measure footage — works offline, saves on this device.</p>
-</div>
-
-<div class="fm-searchrow">
-  <input type="search" id="fm-search" class="input" placeholder="Search address…" autocomplete="off"
-         aria-label="Search address">
-  <button type="button" id="fm-locate" class="btn btn-outline" aria-label="My location">◎</button>
-</div>
-<div class="fm-results"><div class="fm-results-list" id="fm-results" hidden></div></div>
-
-<div id="fm-map" aria-label="Field map"></div>
-
-<div class="section-label" style="margin-top:14px">Tools</div>
-<div class="fm-toolbar" id="fm-toolbar" role="toolbar" aria-label="Map tools">
-  <button type="button" class="btn btn-outline" data-tool="bore_start">◉ Bore start</button>
-  <button type="button" class="btn btn-outline" data-tool="bore_end">◎ Bore end</button>
-  <button type="button" class="btn btn-outline" data-tool="conduit_start">▣ Conduit start</button>
-  <button type="button" class="btn btn-outline" data-tool="conduit_end">▢ Conduit end</button>
-  <button type="button" class="btn btn-outline" data-tool="drop">▼ Drop point</button>
-  <button type="button" class="btn btn-outline" data-tool="splice">✂ Splice point</button>
-  <button type="button" class="btn btn-outline" data-tool="route_conduit_pull">〜 Route: conduit</button>
-  <button type="button" class="btn btn-outline" data-tool="route_drop">〜 Route: drop</button>
-  <button type="button" class="btn btn-outline" data-tool="route_bore">〜 Route: bore</button>
-  <button type="button" class="btn btn-outline" data-tool="route_gps">〜 Route: GPS</button>
-</div>
-
-<div class="card" style="margin-top:6px">
-  <div class="card-body">
-    <div class="section-label mt-0 mb-2">Footage</div>
-    <div class="fm-totals">
-      <div class="fm-total"><div class="k">Conduit pull</div><div class="v"><span id="fm-t-conduit">0</span> <small>ft</small></div></div>
-      <div class="fm-total"><div class="k">Drop</div><div class="v"><span id="fm-t-drop">0</span> <small>ft</small></div></div>
-      <div class="fm-total"><div class="k">Bore routes</div><div class="v"><span id="fm-t-bore">0</span> <small>ft</small></div></div>
-      <div class="fm-total"><div class="k">GPS routes</div><div class="v"><span id="fm-t-gps">0</span> <small>ft</small></div></div>
-      <div class="fm-total"><div class="k">Bore pins</div><div class="v"><span id="fm-t-bores">0</span></div></div>
-      <div class="fm-total"><div class="k">Splice pins</div><div class="v"><span id="fm-t-splices">0</span></div></div>
+<div id="fm-app">
+  <div id="fm-topbar">
+    <div id="fm-types" role="tablist" aria-label="Measurement type"></div>
+    <div id="fm-locrow">
+      <button class="pill" id="fm-locate" type="button">◎ <span id="fm-acc">GPS</span></button>
+      <button class="pill" id="fm-center" type="button">Center on me</button>
+      <input id="fm-search" type="search" placeholder="Service address…" autocomplete="off">
+      <button class="pill" id="fm-tools-btn" type="button">☰ Tools</button>
     </div>
-    <div class="fm-routes" id="fm-routes"></div>
+    <div id="fm-totals"><span>TOTAL <b id="fm-total">0.0 ft</b></span><span id="fm-gpsacc"></span><span id="fm-savestate"></span></div>
   </div>
-</div>
-
-<div class="card" style="margin-top:12px">
-  <div class="card-body">
-    <div class="field">
-      <label for="fm-name">Map name</label>
-      <input type="text" id="fm-name" class="input" placeholder="e.g. 123 County Rd 40 — drop">
-    </div>
-    <div class="field">
-      <label for="fm-notes">Notes</label>
-      <textarea id="fm-notes" rows="2" placeholder="Anything about this map"></textarea>
-    </div>
-    <div class="btn-stack">
-      <button type="button" id="fm-save" class="btn btn-primary btn-block">Save map</button>
-      <button type="button" id="fm-send-job" class="btn btn-outline btn-block">Send measurements to a job →</button>
-      <div class="field-row" style="display:flex;gap:8px">
-        <button type="button" id="fm-export-json" class="btn btn-ghost" style="flex:1">Export JSON</button>
-        <button type="button" id="fm-export-png" class="btn btn-ghost" style="flex:1">Export map image</button>
-      </div>
-      <button type="button" id="fm-clear" class="btn btn-ghost btn-block"
-              data-confirm="Clear all pins and routes from this map?">Clear map</button>
+  <div id="fm-mapwrap">
+    <div id="fm-map" aria-label="Field map"></div>
+    <svg id="fm-crosshair" viewBox="0 0 34 34"><circle cx="17" cy="17" r="10" fill="none" stroke="#ffd75e" stroke-width="2.5"/><circle cx="17" cy="17" r="2.5" fill="#ffd75e"/><path d="M17 0v8M17 26v8M0 17h8M26 17h8" stroke="#ffd75e" stroke-width="2.5"/></svg>
+    <div id="fm-scale">–</div>
+  </div>
+  <div id="fm-pointbar" hidden>
+    <div id="fm-point-label">–</div>
+    <button class="pill" id="fm-relabel" type="button" style="border:1px solid var(--fm-line);background:var(--fm-panel);color:#ffd75e;border-radius:10px;padding:7px 12px;font-weight:800;">Relabel</button>
+  </div>
+  <div id="fm-actionbar">
+    <button id="fm-start" type="button">▶&nbsp; START</button>
+    <div id="fm-measuring" hidden>
+      <button id="fm-undo" type="button">↩ Undo</button>
+      <button id="fm-add" type="button">⊕ Add point</button>
+      <button id="fm-finish" type="button">⚑ Finish</button>
     </div>
   </div>
 </div>
 
-<div class="section-label" style="margin-top:14px">Saved maps</div>
-<div class="card">
-  <div class="card-body tight" id="fm-saved">
-    <div class="empty" style="padding:20px"><p>No saved maps yet.</p></div>
+<div class="fm-overlay" id="fm-tools-overlay" hidden>
+  <div class="fm-sheet">
+    <h3>TOOLS</h3>
+    <div class="fm-row">
+      <button class="fm-btn" id="fm-tool-shapes" type="button">⬡ Shapes</button>
+      <button class="fm-btn" id="fm-tool-gps" type="button">◎ GPS route</button>
+      <button class="fm-btn" id="fm-tool-photo" type="button">📷 Photo pin</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn" id="fm-tool-saved" type="button">🗂 Saved maps</button>
+      <button class="fm-btn" id="fm-tool-clear" type="button">🧹 Clear</button>
+    </div>
+    <h3>SEND TO JOB</h3>
+    <div class="fm-row">
+      <button class="fm-btn primary" id="fm-send-job" type="button">Send measurements →</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn" id="fm-export-json" type="button">⇩ JSON</button>
+      <button class="fm-btn" id="fm-export-png" type="button">🖼 Route image</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn warn" id="fm-tools-close" type="button">Close</button>
+    </div>
+    <div id="fm-saved-list"></div>
+  </div>
+</div>
+
+<div class="fm-overlay" id="fm-summary-overlay" hidden>
+  <div class="fm-sheet">
+    <div class="fm-sum-title">Fiber Drop Measurement</div>
+    <div class="fm-sum-sub" id="fm-sum-sub">ROUTE COMPLETE · SAVED ON THIS DEVICE</div>
+    <div id="fm-sum-map"></div>
+    <div class="fm-totgrid" id="fm-sum-tots"></div>
+    <h3>SEGMENTS</h3>
+    <div id="fm-sum-points"></div>
+    <div class="fm-row">
+      <button class="fm-btn primary" id="fm-resume" type="button">✎ Resume / Edit</button>
+      <button class="fm-btn" id="fm-sum-export" type="button">⇩ Export data</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn" id="fm-sum-image" type="button">🖼 Download route image</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn primary" id="fm-send-job2" type="button">Send measurements to job →</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn warn" id="fm-sum-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="fm-overlay" id="fm-relabel-overlay" hidden>
+  <div class="fm-sheet" style="max-width:420px;">
+    <h3>RELABEL POINT</h3>
+    <div class="fm-row"><input id="fm-relabel-input" placeholder="Point label…" style="flex:1;background:#0b1322;border:1px solid var(--fm-line);border-radius:10px;color:#e6edf7;padding:10px;font-size:14px;"></div>
+    <div class="fm-row">
+      <button class="fm-btn primary" id="fm-relabel-save" type="button">Save</button>
+      <button class="fm-btn" id="fm-relabel-cancel" type="button">Cancel</button>
+    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/vendor/leaflet/leaflet.js?v={{ js_version }}"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
-        crossorigin=""></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin=""></script>
 <script type="module" src="/static/js/fieldmap.js?v={{ js_version }}"></script>
 {% endblock %}

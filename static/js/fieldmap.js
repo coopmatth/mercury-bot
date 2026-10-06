@@ -210,7 +210,7 @@ function initMap() {
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     { maxZoom: 19, attribution: '© Esri World Imagery' },
   );
-  const map = L.map('fm-map', { layers: [sat], zoomControl: true });
+  const map = L.map('fm-map', { layers: [sat], zoomControl: true, keepBuffer: 1, updateWhenIdle: true });
   // Default to the home operating area (NE Indiana); re-centered on load
   // when a saved map or GPS fix is available.
   map.setView([41.64, -85.42], 13);

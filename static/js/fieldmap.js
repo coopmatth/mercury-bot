@@ -217,8 +217,11 @@ function initMap() {
   const resync = () => { try { map.invalidateSize(); } catch (e) {} };
   setTimeout(resync, 120);
   setTimeout(resync, 600);
+  setTimeout(resync, 1500);
   window.addEventListener('resize', resync);
   window.addEventListener('orientationchange', () => setTimeout(resync, 300));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(resync, 200); });
+  try { new ResizeObserver(() => resync()).observe(document.getElementById('fm-map')); } catch (e) {}
   map.on('moveend zoomend', updateScale);
   map.on('click', (e) => { if (state.measuring) addPointAt(e.latlng.lat, e.latlng.lng); });
   updateScale();
@@ -302,7 +305,13 @@ function setMeasuring(on) {
 }
 
 function mapCenter() {
-  const c = state.map.getCenter();
+  const map = state.map;
+  try {
+    const r = document.getElementById('fm-map').getBoundingClientRect();
+    const s = map.getSize();
+    if (Math.abs(s.x - r.width) > 2 || Math.abs(s.y - r.height) > 2) map.invalidateSize();
+  } catch (e) {}
+  const c = map.getCenter();
   return { lat: c.lat, lng: c.lng };
 }
 

@@ -152,6 +152,8 @@ const CachedTileLayer = L.TileLayer.extend({
     tile.alt = '';
     tile.setAttribute('role', 'presentation');
     const url = this.getTileUrl(coords);
+    tile._tileUrl = url;
+    tile.setAttribute('data-tile-url', url);
     const key = tileCacheKey(url);
     const directLoad = () => {
       tile.onload = () => done(null, tile);
@@ -605,9 +607,21 @@ async function exportPNG() {
   }
   toast('Rendering route image…', 'info');
   try {
-    // Capture the live map (tiles + route + markers are all drawn there)
+    // Capture the live map (tiles + route + markers are all drawn there).
+    // Tile cache uses blob: URLs which html2canvas cannot read, so swap
+    // them back to HTTP URLs in the cloned document before rendering.
     const mapCanvas = await html2canvas(document.getElementById('fm-map'), {
       useCORS: true, backgroundColor: '#0e1628', logging: false,
+      onclone: (clonedDoc) => {
+        const imgs = clonedDoc.querySelectorAll('#fm-map img.leaflet-tile');
+        for (const img of imgs) {
+          const httpUrl = img.getAttribute('data-tile-url');
+          if (httpUrl && img.src.startsWith('blob:')) {
+            img.src = httpUrl;
+            img.removeAttribute('srcset');
+          }
+        }
+      },
     });
     // Build final image: map on top, totals bar below
     const tots = typeTotals();

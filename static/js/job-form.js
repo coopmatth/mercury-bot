@@ -2,6 +2,39 @@
 
 import { itemPrice, jobTotal, money, saveJob, removeRow, toast, buzz, routerNav } from './app.js';
 
+/* Required validation photos per charge code (from contractor rate sheet).
+   All photos must be timestamped. */
+const PHOTO_REQS = {
+  'R1': ['ONT and router placement', 'Wall entry point', 'Speedtest', 'Light level at ONT'],
+  'A1': ['Each attachment point', 'Wire run to NID', 'Documentation of route taken'],
+  'D2': ['Light reading at NID after burial', 'Burial route', 'Structure', 'NID with riser guard'],
+  'D6': ['Mule string at start of conduit', 'Mule string at end of conduit', 'Cable in/out of conduit (match entered length)'],
+  'D5': ['Photo of location'],
+  'D7': ['NID mounting with riser guard', 'Inside of the NID'],
+  'D8': ['Splice case (if in terminal)', 'Power meter showing passing light at NID'],
+  'D11': ['Path of drop', 'Beginning of temp drop', 'End of temp drop'],
+  'D10': [],
+};
+
+function codeOf(itemName) {
+  const m = /^(R1|A1|D2|D6|D5|D7|D8|D11|D10)/.exec(itemName || '');
+  return m ? m[1] : null;
+}
+
+function requiredPhotos(items) {
+  let total = 0;
+  const detail = [];
+  for (const name of Object.keys(items)) {
+    const code = codeOf(name);
+    const photos = code ? (PHOTO_REQS[code] || []) : [];
+    if (photos.length) {
+      total += photos.length;
+      detail.push({ code, name, photos });
+    }
+  }
+  return { total, detail };
+}
+
 const form = document.getElementById('job-form');
 const rows = [...document.querySelectorAll('.qty-row')];
 const totalEl = document.getElementById('job-total');
@@ -30,6 +63,17 @@ function refresh() {
     }
   }
   totalEl.textContent = money(jobTotal(items));
+  const { total: photoCount } = requiredPhotos(items);
+  let photoEl = document.getElementById('job-photos');
+  if (!photoEl) {
+    photoEl = document.createElement('div');
+    photoEl.id = 'job-photos';
+    photoEl.className = 'photo-count';
+    totalEl.parentElement.appendChild(photoEl);
+  }
+  photoEl.textContent = photoCount
+    ? `📷 ${photoCount} photo${photoCount === 1 ? '' : 's'} required`
+    : '';
 }
 
 for (const row of rows) {
@@ -88,9 +132,15 @@ form.addEventListener('submit', async (event) => {
     sessionStorage.setItem(
       'mercury:flash',
       JSON.stringify({
-        message: navigator.onLine
-          ? `Job saved · ${money(jobTotal(items))}`
-          : `Saved offline · ${money(jobTotal(items))} — will sync automatically`,
+        message: (() => {
+          const { total: photoCount } = requiredPhotos(items);
+          const photoMsg = photoCount
+            ? ` · You need ${photoCount} photo${photoCount === 1 ? '' : 's'} for these tasks to be paid`
+            : '';
+          return navigator.onLine
+            ? `Job saved · ${money(jobTotal(items))}${photoMsg}`
+            : `Saved offline · ${money(jobTotal(items))}${photoMsg} — will sync automatically`;
+        })(),
         kind: navigator.onLine ? 'success' : 'warning',
       }),
     );

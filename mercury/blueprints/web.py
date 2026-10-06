@@ -97,6 +97,11 @@ def scanner_page():
     return render_template("scanner.html", scans=list_scans(25))
 
 
+@bp.get("/fieldmap")
+def fieldmap_page():
+    return render_template("fieldmap.html")
+
+
 @bp.get("/photos")
 def photos_page():
     return render_template("photos.html")

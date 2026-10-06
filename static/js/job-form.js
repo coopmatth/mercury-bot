@@ -119,3 +119,35 @@ window.addEventListener('beforeunload', (event) => {
   event.preventDefault();
   event.returnValue = '';
 });
+
+// Field-map handoff: the Map tab can stash measured footage here, then route
+// to /jobs/new. Applies once, to a brand-new form only — never clobbers an
+// edit in progress.
+try {
+  const raw = sessionStorage.getItem('mercury:job-prefill');
+  if (raw && !form.id.value) {
+    const pre = JSON.parse(raw);
+    sessionStorage.removeItem('mercury:job-prefill');
+    if (pre.address) form.address.value = String(pre.address);
+    if (pre.notes) {
+      form.notes.value = form.notes.value
+        ? `${form.notes.value}\n${pre.notes}`
+        : String(pre.notes);
+    }
+    let applied = 0;
+    for (const [name, qty] of Object.entries(pre.items || {})) {
+      const row = rows.find((r) => r.dataset.item === name);
+      const value = Number(qty);
+      if (row && Number.isFinite(value) && value > 0) {
+        row.querySelector('.qty-input').value = value;
+        applied += 1;
+      }
+    }
+    if (applied) {
+      refresh();
+      toast(`Filled ${applied} line${applied === 1 ? '' : 's'} from your field map.`, 'success');
+    }
+  }
+} catch {
+  /* malformed prefill — ignore */
+}

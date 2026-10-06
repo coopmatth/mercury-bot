@@ -105,6 +105,19 @@ CREATE TABLE IF NOT EXISTS rates (
     is_tiered  INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS fieldmaps (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    job_id     TEXT NOT NULL DEFAULT '',
+    data       TEXT NOT NULL DEFAULT '{}',
+    notes      TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted    INTEGER NOT NULL DEFAULT 0,
+    device_id  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_fieldmaps_updated ON fieldmaps(updated_at);
 """
 
 # Seeded into `rates` the first time the table is empty, and wholesale-replaced

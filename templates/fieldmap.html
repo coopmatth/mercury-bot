@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% set active_tab = 'map' %}
+{% block title %}Field Map · Mercury{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="">
+<style>
+  #fm-map {
+    height: 52vh;
+    min-height: 320px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: #0e1628;
+    z-index: 0;
+  }
+  #fm-map.offline {
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 24px;
+    color: var(--text-mute);
+  }
+  /* Dark Leaflet chrome to match Mercury */
+  .leaflet-bar a, .leaflet-bar a:hover {
+    background: #141d33;
+    color: #e6edf7;
+    border-bottom: 1px solid var(--line);
+  }
+  .leaflet-control-attribution {
+    background: rgba(11,17,32,.7) !important;
+    color: #7d8aa5 !important;
+    font-size: 9px;
+  }
+  .leaflet-control-attribution a { color: #9fb2d1 !important; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+    background: #141d33;
+    color: #e6edf7;
+  }
+  .fm-pin {
+    display: grid;
+    place-items: center;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 800;
+    color: #04121e;
+    border: 2px solid rgba(255,255,255,.85);
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  }
+  .fm-toolbar {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fm-toolbar .btn { white-space: nowrap; flex-shrink: 0; }
+  .fm-toolbar .btn.active {
+    background: var(--accent);
+    color: #04121e;
+    border-color: var(--accent);
+  }
+  .fm-searchrow { display: flex; gap: 8px; margin-bottom: 8px; }
+  .fm-searchrow input { flex: 1; }
+  .fm-results {
+    position: relative;
+  }
+  .fm-results-list {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    z-index: 500;
+    background: #141d33;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .fm-results-list button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    color: #e6edf7;
+    font-size: 13px;
+  }
+  .fm-results-list button:last-child { border-bottom: none; }
+  .fm-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fm-total {
+    background: #101828;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .fm-total .k { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: .04em; }
+  .fm-total .v { font-size: 20px; font-weight: 800; color: #e6edf7; }
+  .fm-total .v small { font-size: 12px; font-weight: 600; color: var(--text-mute); }
+  .fm-routes { margin-top: 8px; }
+  .fm-route-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .fm-route-row:last-child { border-bottom: none; }
+  .fm-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+  .fm-route-row .grow { flex: 1; }
+  .fm-route-row .ft { font-weight: 700; }
+  .fm-del { background: none; border: none; color: #f87171; font-size: 16px; padding: 4px 8px; }
+  .fm-saved-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .fm-saved-row:last-child { border-bottom: none; }
+  .fm-saved-row .grow { flex: 1; }
+  .fm-saved-row .name { font-weight: 700; font-size: 14px; }
+  .fm-saved-row .meta { font-size: 12px; color: var(--text-mute); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">
+  <h1>Field Map</h1>
+  <p>Drop pins, trace routes, measure footage — works offline, saves on this device.</p>
+</div>
+
+<div class="fm-searchrow">
+  <input type="search" id="fm-search" class="input" placeholder="Search address…" autocomplete="off"
+         aria-label="Search address">
+  <button type="button" id="fm-locate" class="btn btn-outline" aria-label="My location">◎</button>
+</div>
+<div class="fm-results"><div class="fm-results-list" id="fm-results" hidden></div></div>
+
+<div id="fm-map" aria-label="Field map"></div>
+
+<div class="section-label" style="margin-top:14px">Tools</div>
+<div class="fm-toolbar" id="fm-toolbar" role="toolbar" aria-label="Map tools">
+  <button type="button" class="btn btn-outline" data-tool="bore_start">◉ Bore start</button>
+  <button type="button" class="btn btn-outline" data-tool="bore_end">◎ Bore end</button>
+  <button type="button" class="btn btn-outline" data-tool="conduit_start">▣ Conduit start</button>
+  <button type="button" class="btn btn-outline" data-tool="conduit_end">▢ Conduit end</button>
+  <button type="button" class="btn btn-outline" data-tool="drop">▼ Drop point</button>
+  <button type="button" class="btn btn-outline" data-tool="splice">✂ Splice point</button>
+  <button type="button" class="btn btn-outline" data-tool="route_conduit_pull">〜 Route: conduit</button>
+  <button type="button" class="btn btn-outline" data-tool="route_drop">〜 Route: drop</button>
+  <button type="button" class="btn btn-outline" data-tool="route_bore">〜 Route: bore</button>
+  <button type="button" class="btn btn-outline" data-tool="route_gps">〜 Route: GPS</button>
+</div>
+
+<div class="card" style="margin-top:6px">
+  <div class="card-body">
+    <div class="section-label mt-0 mb-2">Footage</div>
+    <div class="fm-totals">
+      <div class="fm-total"><div class="k">Conduit pull</div><div class="v"><span id="fm-t-conduit">0</span> <small>ft</small></div></div>
+      <div class="fm-total"><div class="k">Drop</div><div class="v"><span id="fm-t-drop">0</span> <small>ft</small></div></div>
+      <div class="fm-total"><div class="k">Bore routes</div><div class="v"><span id="fm-t-bore">0</span> <small>ft</small></div></div>
+      <div class="fm-total"><div class="k">GPS routes</div><div class="v"><span id="fm-t-gps">0</span> <small>ft</small></div></div>
+      <div class="fm-total"><div class="k">Bore pins</div><div class="v"><span id="fm-t-bores">0</span></div></div>
+      <div class="fm-total"><div class="k">Splice pins</div><div class="v"><span id="fm-t-splices">0</span></div></div>
+    </div>
+    <div class="fm-routes" id="fm-routes"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px">
+  <div class="card-body">
+    <div class="field">
+      <label for="fm-name">Map name</label>
+      <input type="text" id="fm-name" class="input" placeholder="e.g. 123 County Rd 40 — drop">
+    </div>
+    <div class="field">
+      <label for="fm-notes">Notes</label>
+      <textarea id="fm-notes" rows="2" placeholder="Anything about this map"></textarea>
+    </div>
+    <div class="btn-stack">
+      <button type="button" id="fm-save" class="btn btn-primary btn-block">Save map</button>
+      <button type="button" id="fm-send-job" class="btn btn-outline btn-block">Send measurements to a job →</button>
+      <div class="field-row" style="display:flex;gap:8px">
+        <button type="button" id="fm-export-json" class="btn btn-ghost" style="flex:1">Export JSON</button>
+        <button type="button" id="fm-export-png" class="btn btn-ghost" style="flex:1">Export map image</button>
+      </div>
+      <button type="button" id="fm-clear" class="btn btn-ghost btn-block"
+              data-confirm="Clear all pins and routes from this map?">Clear map</button>
+    </div>
+  </div>
+</div>
+
+<div class="section-label" style="margin-top:14px">Saved maps</div>
+<div class="card">
+  <div class="card-body tight" id="fm-saved">
+    <div class="empty" style="padding:20px"><p>No saved maps yet.</p></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+        crossorigin=""></script>
+<script type="module" src="/static/js/fieldmap.js"></script>
+{% endblock %}

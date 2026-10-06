@@ -10,9 +10,10 @@ from ..config import Config, update_env_file
 from ..db import current_seq
 from ..email_service import EmailError, send_report
 from ..exports import build_contractor_workbook, build_personal_workbook
-from ..models import (delete_custom_item, delete_job, delete_scan, list_jobs,
+from ..models import (delete_custom_item, delete_fieldmap, delete_job, delete_scan,
+                      get_fieldmap, list_fieldmaps, list_jobs,
                       list_custom_items, list_scans, parse_date, save_custom_item,
-                      save_job, save_scan, week_bounds, week_summary)
+                      save_fieldmap, save_job, save_scan, week_bounds, week_summary)
 from ..rates import (ITEM_LIST, calculate_job_total, rate_table, get_item_list,
                      save_rate_card_item, delete_rate_card_item)
 from ..sync import devices, sync
@@ -37,7 +38,7 @@ def _cors_for_app_shell(response):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Device-Id"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     return response
 
 
@@ -179,6 +180,38 @@ def api_save_scan():
 @bp.delete("/scans/<scan_id>")
 def api_delete_scan(scan_id):
     return jsonify({"ok": delete_scan(scan_id, device_id=_device())})
+
+
+@bp.get("/fieldmaps")
+def api_list_fieldmaps():
+    return jsonify({"fieldmaps": list_fieldmaps()})
+
+
+@bp.post("/fieldmaps")
+def api_save_fieldmap():
+    fm = save_fieldmap(request.get_json(silent=True) or {}, device_id=_device())
+    return jsonify({"ok": True, "fieldmap": fm})
+
+
+@bp.get("/fieldmaps/<fm_id>")
+def api_get_fieldmap(fm_id):
+    fm = get_fieldmap(fm_id)
+    if not fm:
+        return jsonify({"ok": False, "error": "Field map not found."}), 404
+    return jsonify({"fieldmap": fm})
+
+
+@bp.put("/fieldmaps/<fm_id>")
+def api_put_fieldmap(fm_id):
+    data = request.get_json(silent=True) or {}
+    data["id"] = fm_id
+    fm = save_fieldmap(data, device_id=_device())
+    return jsonify({"ok": True, "fieldmap": fm})
+
+
+@bp.delete("/fieldmaps/<fm_id>")
+def api_delete_fieldmap(fm_id):
+    return jsonify({"ok": delete_fieldmap(fm_id, device_id=_device())})
 
 
 @bp.get("/ai/models")

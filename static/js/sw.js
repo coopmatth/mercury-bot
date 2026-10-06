@@ -11,6 +11,7 @@ const PRECACHE = [
   '/photos',
   '/reports',
   '/settings',
+  '/fieldmap',
   '/offline',
   '/static/css/app.css',
   '/static/js/store.js',
@@ -21,6 +22,7 @@ const PRECACHE = [
   '/static/js/job-form.js',
   '/static/js/scanner.js',
   '/static/js/photos.js',
+  '/static/js/fieldmap.js',
   '/static/js/native.js',
   // The OCR engine used to be precached here — ~9.7 MB of Tesseract wasm on
   // every install. On-device reading is now Apple's Vision framework, which

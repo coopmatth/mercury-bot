@@ -522,3 +522,7 @@ main.container.nav-fade {
 .checklist { margin: 0; padding-left: 1.4em; }
 .checklist li { margin: 8px 0; font-size: 14px; }
 .checklist .ck-code { display: inline-block; min-width: 38px; font-weight: 800; color: var(--accent, #38bdf8); margin-right: 8px; }
+
+.pc-head { font-weight: 700; margin-bottom: 6px; }
+.pc-list { margin: 0; padding-left: 1.4em; font-size: 13px; }
+.pc-list li { margin: 4px 0; }

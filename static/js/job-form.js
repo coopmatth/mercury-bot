@@ -1,39 +1,8 @@
 /* Job form. */
 
 import { itemPrice, jobTotal, money, saveJob, removeRow, toast, buzz, routerNav } from './app.js';
+import { requiredPhotos, photoChecklist } from './photo-reqs.js';
 
-/* Required validation photos per charge code (from contractor rate sheet).
-   All photos must be timestamped. */
-const PHOTO_REQS = {
-  'R1': ['ONT and router placement', 'Wall entry point', 'Speedtest', 'Light level at ONT'],
-  'A1': ['Each attachment point', 'Wire run to NID', 'Documentation of route taken'],
-  'D2': ['Light reading at NID after burial', 'Burial route', 'Structure', 'NID with riser guard'],
-  'D6': ['Mule string at start of conduit', 'Mule string at end of conduit', 'Cable in/out of conduit (match entered length)'],
-  'D5': ['Photo of location'],
-  'D7': ['NID mounting with riser guard', 'Inside of the NID'],
-  'D8': ['Splice case (if in terminal)', 'Power meter showing passing light at NID'],
-  'D11': ['Path of drop', 'Beginning of temp drop', 'End of temp drop'],
-  'D10': [],
-};
-
-function codeOf(itemName) {
-  const m = /^(R1|A1|D2|D6|D5|D7|D8|D11|D10)/.exec(itemName || '');
-  return m ? m[1] : null;
-}
-
-function requiredPhotos(items) {
-  let total = 0;
-  const detail = [];
-  for (const name of Object.keys(items)) {
-    const code = codeOf(name);
-    const photos = code ? (PHOTO_REQS[code] || []) : [];
-    if (photos.length) {
-      total += photos.length;
-      detail.push({ code, name, photos });
-    }
-  }
-  return { total, detail };
-}
 
 const form = document.getElementById('job-form');
 const rows = [...document.querySelectorAll('.qty-row')];
@@ -71,9 +40,15 @@ function refresh() {
     photoEl.className = 'photo-count';
     totalEl.parentElement.appendChild(photoEl);
   }
-  photoEl.textContent = photoCount
-    ? `📷 ${photoCount} photo${photoCount === 1 ? '' : 's'} required`
-    : '';
+  if (photoCount) {
+    const list = photoChecklist(items);
+    let html = '<div class="pc-head">📷 ' + photoCount + ' photo' + (photoCount === 1 ? '' : 's') + ' required</div><ol class="pc-list">';
+    for (const p of list) html += '<li><span class="ck-code">' + p.code + '</span> ' + p.name + '</li>';
+    html += '</ol>';
+    photoEl.innerHTML = html;
+  } else {
+    photoEl.innerHTML = '';
+  }
 }
 
 for (const row of rows) {
@@ -166,7 +141,8 @@ form.addEventListener('submit', async (event) => {
         kind: 'success',
       }),
     );
-    routerNav('/photos');
+    const navJobId = saved?.id || form.id.value;
+    routerNav('/photos?job=' + encodeURIComponent(navJobId));
   } catch (error) {
     button.disabled = false;
     button.textContent = 'Save job';

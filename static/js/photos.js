@@ -12,6 +12,7 @@
  * is drawn into the image itself, upper-right, so it survives any upload. */
 
 import { toast, buzz } from './app.js';
+import { photoChecklist } from './photo-reqs.js';
 import { isNativeApp, savePhotos, getNativeLocation } from './native.js';
 
 const els = {
@@ -40,27 +41,47 @@ try {
   }
 } catch { /* malformed — ignore */ }
 
-if (photoJob && photoJob.photos && photoJob.photos.length) {
+function renderChecklist(job) {
   const card = document.getElementById('photo-checklist');
   const title = document.getElementById('checklist-title');
   const meta = document.getElementById('checklist-meta');
   const list = document.getElementById('checklist-items');
-  if (card && list) {
-    title.textContent = `Photos needed — ${photoJob.photoCount}`;
-    meta.textContent = [
-      photoJob.workOrderId ? `WO ${photoJob.workOrderId}` : null,
-      photoJob.address || null,
-      photoJob.total || null,
-    ].filter(Boolean).join(' · ');
-    list.innerHTML = '';
-    photoJob.photos.forEach((p) => {
-      const li = document.createElement('li');
-      li.innerHTML = '<span class="ck-code"></span><span class="ck-name"></span>';
-      li.querySelector('.ck-code').textContent = p.code;
-      li.querySelector('.ck-name').textContent = p.name;
-      list.appendChild(li);
-    });
-    card.classList.remove('hidden');
+  if (!card || !list || !job) return;
+  const photos = job.photos || photoChecklist(job.items || {});
+  if (!photos.length) return;
+  title.textContent = 'Photos needed \u2014 ' + photos.length;
+  meta.textContent = [
+    job.workOrderId ? 'WO ' + job.workOrderId : null,
+    job.address || null,
+    job.total || null,
+  ].filter(Boolean).join(' \u00b7 ');
+  list.innerHTML = '';
+  photos.forEach((p) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="ck-code"></span><span class="ck-name"></span>';
+    li.querySelector('.ck-code').textContent = p.code;
+    li.querySelector('.ck-name').textContent = p.name;
+    list.appendChild(li);
+  });
+  card.classList.remove('hidden');
+}
+
+if (photoJob && photoJob.photos && photoJob.photos.length) {
+  renderChecklist(photoJob);
+} else {
+  const jobId = new URLSearchParams(window.location.search).get('job');
+  if (jobId) {
+    import('./store.js').then((m) => m.get('jobs', jobId)).then((job) => {
+      if (job) {
+        photoJob = {
+          jobId: job.id,
+          workOrderId: job.order_number || String(job.id).slice(0, 8),
+          address: job.address,
+          items: job.items,
+        };
+        renderChecklist(photoJob);
+      }
+    }).catch(() => {});
   }
 }
 

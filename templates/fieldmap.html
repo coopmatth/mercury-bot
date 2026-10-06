@@ -25,7 +25,10 @@
     background: var(--fm-bg);
     position: relative;
     overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: auto;
   }
+  #fm-app, #fm-app * { -webkit-tap-highlight-color: transparent; }
   /* ---- top overlay ---- */
   #fm-topbar {
     z-index: 500;
@@ -72,7 +75,8 @@
   #fm-map {
     position: absolute; inset: 0;
     background: #0e1628; z-index: 0;
-    touch-action: pan-x pan-y;
+    touch-action: none;
+    overscroll-behavior: none;
   }
   #fm-map .leaflet-container { height: 100% !important; width: 100% !important; }
   .leaflet-bar a, .leaflet-bar a:hover { background: #141d33; color: #e6edf7; border-bottom: 1px solid var(--fm-line); }

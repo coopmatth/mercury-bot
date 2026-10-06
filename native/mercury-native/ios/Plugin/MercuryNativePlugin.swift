@@ -35,6 +35,19 @@ public class MercuryNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "openFile", returnType: CAPPluginReturnPromise)
     ]
 
+    // MARK: - Native HTTP cache (service-worker equivalent)
+
+    public override func load() {
+        // 20 MB memory + 200 MB disk native HTTP cache.
+        // WKWebView routes requests through URLCache.shared, so versioned
+        // static assets load from disk after the first fetch.
+        URLCache.shared = URLCache(
+            memoryCapacity: 20 * 1024 * 1024,
+            diskCapacity: 200 * 1024 * 1024,
+            diskPath: "mercury-http-cache"
+        )
+    }
+
     // MARK: - OCR
 
     @objc func recognizeText(_ call: CAPPluginCall) {

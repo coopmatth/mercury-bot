@@ -133,12 +133,18 @@ def create_app(config: type[Config] = Config) -> Flask:
     start_daily_dispatch_scheduler(app)
 
     @app.after_request
-    def _no_cache_js(response):
-        # The phone caches aggressively and the iOS webview has no service
-        # worker to manage updates. Force revalidation of JS/CSS so a deploy
-        # always reaches the device. (HTML entry points also carry ?v=.)
-        if request.path.startswith("/static/js/") or request.path.startswith("/static/css/"):
-            response.headers["Cache-Control"] = "no-cache"
+    def _cache_policy(response):
+        # Versioned static assets (?v=) are immutable - cache aggressively so
+        # the native URLCache (iOS) and service worker (PWA) serve from disk.
+        # Unversioned assets still revalidate to ensure deploys reach devices.
+        p = request.path
+        is_static = p.startswith("/static/js/") or p.startswith("/static/css/") or p.startswith("/static/vendor/")
+        if is_static:
+            if request.args.get("v"):
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                response.headers["Cache-Control"] = "no-cache"
         return response
+
 
     return app

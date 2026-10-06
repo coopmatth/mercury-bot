@@ -82,7 +82,6 @@ function createCustomType() {
   saveCustomTypes();
   document.getElementById('fm-custom-overlay').hidden = true;
   state.activeType = id;
-  initCustomPanel();
   renderTypes();
   toast('"' + name + '" created', 'ok');
   buzz(15);
@@ -1014,6 +1013,7 @@ function boot() {
   if (_booted) return;
   _booted = true;
   try {
+    initCustomPanel();
     renderTypes();
   } catch (e) {
     console.error('renderTypes failed:', e);

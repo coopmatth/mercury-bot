@@ -265,8 +265,22 @@ document.addEventListener('click', async (event) => {
   }
 
   try {
-    const res = await fetch(targetUrl);
-    const html = await res.text();
+    // Page cache: serve from memory if we've been here before
+    if (!window._pageCache) window._pageCache = new Map();
+    let html;
+    const skipCache = targetUrl.includes("/fieldmap");
+    if (!skipCache && window._pageCache.has(targetUrl)) {
+      html = window._pageCache.get(targetUrl);
+    } else {
+      const res = await fetch(targetUrl);
+      html = await res.text();
+      // Cache it (max 10 pages)
+      if (window._pageCache.size >= 10) {
+        const firstKey = window._pageCache.keys().next().value;
+        window._pageCache.delete(firstKey);
+      }
+      if (!skipCache) window._pageCache.set(targetUrl, html);
+    }
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
     const currentMain = document.querySelector('main.container');

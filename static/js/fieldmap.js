@@ -1080,6 +1080,14 @@ function wire() {
 let _booted = false;
 function boot() {
   loadCustomTypes();
+  // Request persistent storage so the browser won't evict our tiles/jobs
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().then((granted) => {
+        console.log('Persistent storage:', granted ? 'granted' : 'not granted');
+      }).catch(() => {});
+    }
+  } catch (e) {}
   if (_booted) return;
   _booted = true;
   try {

@@ -623,10 +623,11 @@ async function exportPNG() {
         }
       },
     });
-    // Build final image: map on top, totals bar below
+    // Build final image: map on top, breakdown bar below
     const tots = typeTotals();
     const grand = grandTotal();
-    const barH = 120;
+    const activeTypes = TYPE_ORDER.filter((k) => (tots[k] || 0) > 0);
+    const barH = 120 + activeTypes.length * 44;
     const W = mapCanvas.width;
     const H = mapCanvas.height + barH;
     const out = document.createElement('canvas');
@@ -635,39 +636,42 @@ async function exportPNG() {
     ctx.fillStyle = '#0B1120';
     ctx.fillRect(0, 0, W, H);
     ctx.drawImage(mapCanvas, 0, 0);
-    // totals bar
     const bx = 0, by = mapCanvas.height, bw = W, bh = barH;
     ctx.fillStyle = '#101a30';
     ctx.fillRect(bx, by, bw, bh);
-    const scale = W / 750; // design for ~750px wide
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 ' + Math.round(34 * scale) + 'px system-ui, sans-serif';
+    const scale = W / 750;
     ctx.textBaseline = 'middle';
-    ctx.fillText('TOTAL  ' + grand.toFixed(1) + ' ft', 24 * scale, by + 34 * scale);
-    // color-coded per-type strip
-    let x = 24 * scale;
-    const stripY = by + 68 * scale, stripH = 30 * scale;
-    for (const k of TYPE_ORDER) {
-      const v = tots[k] || 0;
-      if (v <= 0) continue;
-      const t = TYPES[k];
-      const segW = Math.max(4, (v / grand) * (bw - 48 * scale));
-      ctx.fillStyle = t.color;
-      ctx.fillRect(x, stripY, segW, stripH);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 ' + Math.round(20 * scale) + 'px system-ui, sans-serif';
-      const label = t.label + ' ' + v.toFixed(0);
-      if (segW > ctx.measureText(label).width + 16) {
-        ctx.fillText(label, x + 8, stripY + stripH / 2);
-      }
-      x += segW + 4;
-    }
-    // date stamp
+    ctx.textAlign = 'left';
+    // grand total
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 ' + Math.round(38 * scale) + 'px system-ui, sans-serif';
+    ctx.fillText('TOTAL  ' + grand.toFixed(1) + ' ft', 24 * scale, by + 36 * scale);
     ctx.fillStyle = '#9fb2d1';
     ctx.font = '400 ' + Math.round(18 * scale) + 'px system-ui, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(new Date().toLocaleString(), bw - 24 * scale, by + 34 * scale);
+    ctx.fillText(new Date().toLocaleString(), bw - 24 * scale, by + 36 * scale);
     ctx.textAlign = 'left';
+    // per-type breakdown, one row each
+    let ry = by + 78 * scale;
+    for (const k of activeTypes) {
+      const t = TYPES[k];
+      const v = tots[k];
+      // color dot
+      ctx.fillStyle = t.color;
+      ctx.beginPath();
+      ctx.arc(36 * scale, ry, 12 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      // label + footage
+      ctx.fillStyle = '#e6edf7';
+      ctx.font = '800 ' + Math.round(26 * scale) + 'px system-ui, sans-serif';
+      ctx.fillText(t.label.toUpperCase(), 58 * scale, ry);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 ' + Math.round(26 * scale) + 'px system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(v.toFixed(1) + ' ft', bw - 24 * scale, ry);
+      ctx.textAlign = 'left';
+      ry += 44 * scale;
+    }
     out.toBlob((blob) => {
       if (blob) {
         download('mercury-fieldmap-' + (state.currentId || uuid()).slice(0, 8) + '.png', blob);

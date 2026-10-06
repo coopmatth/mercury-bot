@@ -17,6 +17,91 @@ const TYPES = {
 };
 const TYPE_ORDER = ['aerial', 'burial', 'bore', 'conduit', 'strand', 'lashing'];
 
+/* ---------------- Custom measurement types ---------------- */
+const CUSTOM_KEY = 'mercury:fieldmap:custom-types';
+let customDash = null; // null = solid, '1 6' = dots
+
+function loadCustomTypes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
+    for (const c of saved) {
+      if (c && c.id && c.label && !TYPES[c.id]) {
+        TYPES[c.id] = { label: c.label, color: c.color || '#f97316', dash: c.dash || null, rate: null, custom: true };
+        if (!TYPE_ORDER.includes(c.id)) TYPE_ORDER.push(c.id);
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function saveCustomTypes() {
+  try {
+    const customs = TYPE_ORDER.filter(k => TYPES[k] && TYPES[k].custom)
+      .map(k => ({ id: k, label: TYPES[k].label, color: TYPES[k].color, dash: TYPES[k].dash }));
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(customs));
+  } catch (e) { /* ignore */ }
+}
+
+const CUSTOM_SWATCHES = ['#f97316', '#ef4444', '#ec4899', '#a855f7', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#84cc16', '#eab308', '#facc15', '#ffffff'];
+
+function openCustomPanel() {
+  document.getElementById('fm-custom-overlay').hidden = false;
+  document.getElementById('fm-custom-name').value = '';
+  customDash = null;
+  updateCustomStyleBtns();
+  const sw = document.getElementById('fm-custom-swatches');
+  sw.innerHTML = '';
+  for (const c of CUSTOM_SWATCHES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.style.cssText = 'width:32px;height:32px;border-radius:8px;border:2px solid transparent;background:' + c + ';cursor:pointer;';
+    b.addEventListener('click', () => {
+      document.getElementById('fm-custom-color').value = c;
+      [...sw.children].forEach(x => x.style.borderColor = 'transparent');
+      b.style.borderColor = '#fff';
+      buzz(5);
+    });
+    sw.appendChild(b);
+  }
+  buzz(8);
+}
+
+function updateCustomStyleBtns() {
+  const s = document.getElementById('fm-custom-solid');
+  const d = document.getElementById('fm-custom-dots');
+  s.classList.toggle('primary', customDash === null);
+  d.classList.toggle('primary', customDash !== null);
+}
+
+function createCustomType() {
+  const name = (document.getElementById('fm-custom-name').value || '').trim();
+  if (!name) { toast('Enter a name for the custom type', 'warn'); return; }
+  const color = document.getElementById('fm-custom-color').value || '#f97316';
+  const id = 'custom-' + Date.now().toString(36);
+  TYPES[id] = { label: name, color, dash: customDash, rate: null, custom: true };
+  TYPE_ORDER.push(id);
+  saveCustomTypes();
+  document.getElementById('fm-custom-overlay').hidden = true;
+  state.activeType = id;
+  initCustomPanel();
+  renderTypes();
+  toast('"' + name + '" created', 'ok');
+  buzz(15);
+}
+
+function initCustomPanel() {
+  document.getElementById('fm-custom-close').addEventListener('click', () => {
+    document.getElementById('fm-custom-overlay').hidden = true;
+  });
+  document.getElementById('fm-custom-solid').addEventListener('click', () => {
+    customDash = null; updateCustomStyleBtns(); buzz(5);
+  });
+  document.getElementById('fm-custom-dots').addEventListener('click', () => {
+    customDash = '1 6'; updateCustomStyleBtns(); buzz(5);
+  });
+  document.getElementById('fm-custom-create').addEventListener('click', createCustomType);
+}
+
+
 /* Mercury rate-card mapping (see 2026-10-03 9-item card) */
 const RATE_MAP = {
   aerial:  { name: 'Hang Overhead Drop',        unit: 'ft',  price: 0.40 },
@@ -273,6 +358,12 @@ function renderTypes() {
     });
     host.appendChild(b);
   }
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'fm-type';
+  more.textContent = '... MORE';
+  more.addEventListener('click', openCustomPanel);
+  host.appendChild(more);
 }
 
 /* ------------------------------------------------------------ GPS */
@@ -919,6 +1010,7 @@ function wire() {
 
 let _booted = false;
 function boot() {
+  loadCustomTypes();
   if (_booted) return;
   _booted = true;
   try {

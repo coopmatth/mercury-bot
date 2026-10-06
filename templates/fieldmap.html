@@ -244,6 +244,27 @@
   </div>
 </div>
 
+<div class="fm-overlay" id="fm-custom-overlay" hidden>
+  <div class="fm-sheet" style="max-width:420px;">
+    <h3>CUSTOM MEASUREMENT</h3>
+    <div class="fm-row"><input id="fm-custom-name" placeholder="Name (e.g. Fiber Drop)" style="flex:1;background:#0b1322;border:1px solid var(--fm-line);border-radius:10px;color:#e6edf7;padding:10px;font-size:14px;"></div>
+    <div class="fm-row" style="align-items:center;">
+      <input type="color" id="fm-custom-color" value="#f97316" style="width:44px;height:44px;border:1px solid var(--fm-line);border-radius:10px;background:#0b1322;padding:2px;">
+      <div id="fm-custom-swatches" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;"></div>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn" id="fm-custom-solid" type="button">SOLID</button>
+      <button class="fm-btn" id="fm-custom-dots" type="button">DOTS</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn primary" id="fm-custom-create" type="button">CREATE AND USE</button>
+    </div>
+    <div class="fm-row">
+      <button class="fm-btn warn" id="fm-custom-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="fm-overlay" id="fm-relabel-overlay" hidden>
   <div class="fm-sheet" style="max-width:420px;">
     <h3>RELABEL POINT</h3>

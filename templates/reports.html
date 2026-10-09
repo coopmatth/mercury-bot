@@ -178,6 +178,9 @@
   });
 
   document.querySelectorAll('[data-email]').forEach((button) => {
+    // Idempotent: the router may re-execute this script on navigation.
+    if (button.dataset.wired) return;
+    button.dataset.wired = '1';
     button.addEventListener('click', async () => {
       const kind = button.dataset.email;
       const week = new URLSearchParams(location.search).get('week') || '';

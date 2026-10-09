@@ -98,11 +98,17 @@
     const rate = parseFloat(form.rate.value) || 0;
     totalEl.textContent = money(qty * rate);
   };
-  form.qty.addEventListener('input', refresh);
-  form.rate.addEventListener('input', refresh);
+  // Idempotent: the router may re-execute this script on navigation.
+  if (!form.dataset.wired) {
+    form.dataset.wired = '1';
+    form.qty.addEventListener('input', refresh);
+    form.rate.addEventListener('input', refresh);
+  }
   refresh();
 
-  form.addEventListener('submit', async (event) => {
+  if (!form.dataset.wiredSubmit) {
+    form.dataset.wiredSubmit = '1';
+    form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = document.getElementById('save-custom');
     button.disabled = true;
@@ -130,7 +136,8 @@
       button.disabled = false;
       button.textContent = 'Add item';
     }
-  });
+    });
+  }
 
 </script>
 {% endblock %}

@@ -183,6 +183,13 @@
 
 {% block scripts %}
 <script type="module">
+  // Idempotent: the router may re-execute this script on navigation.
+  // wireOnce() attaches each listener at most once per element.
+  function wireOnce(el, event, handler) {
+    if (!el || el.dataset.wired) return;
+    el.dataset.wired = '1';
+    el.addEventListener(event, handler);
+  }
   import { store, sync, toast } from '/static/js/app.js';
 
   async function refresh() {
@@ -219,7 +226,7 @@
   }
   checkOffline();
 
-  document.getElementById('offline-status').addEventListener('click', async () => {
+  wireOnce(document.getElementById('offline-status'), 'click', async () => {
     const el = document.getElementById('offline-status');
     if (!('serviceWorker' in navigator)) return;
     el.textContent = 'reinstalling…';
@@ -233,7 +240,7 @@
     checkOffline();
   });
 
-  document.getElementById('sync-btn').addEventListener('click', async () => {
+  wireOnce(document.getElementById('sync-btn'), 'click', async () => {
     const result = await sync.syncNow();
     if (result.error) toast(`Sync failed: ${result.error}`, 'danger');
     else toast(`Pushed ${result.pushed || 0}, pulled ${result.pulled || 0}.`, 'success');
@@ -241,6 +248,8 @@
   });
 
   document.querySelectorAll('.edit-rate-btn').forEach(btn => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = '1';
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
       const name = window.prompt("Charge Code Name:", btn.dataset.name);
@@ -261,7 +270,7 @@
     });
   });
 
-  document.getElementById('add-code-btn')?.addEventListener('click', async () => {
+  wireOnce(document.getElementById('add-code-btn'), 'click', async () => {
     const name = window.prompt("New Charge Code Name:");
     if (!name) return;
     const rate = window.prompt("Rate ($):", "0.00");
@@ -280,6 +289,8 @@
   });
 
   document.querySelectorAll('.del-rate-btn').forEach(btn => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = '1';
     btn.addEventListener('click', async () => {
       if (!window.confirm(`Delete charge code "${btn.dataset.name}"?`)) return;
       const res = await fetch(`/api/rates/${btn.dataset.id}`, { method: 'DELETE' });
@@ -291,6 +302,8 @@
   });
 
   document.querySelectorAll('.edit-email-btn').forEach(btn => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = '1';
     btn.addEventListener('click', async () => {
       const type = btn.dataset.type;
       const displayType = type === 'contractor_email' ? 'Contractor' : 'Your';
@@ -314,7 +327,7 @@
     });
   });
 
-  document.getElementById('check-models')?.addEventListener('click', async (event) => {
+  wireOnce(document.getElementById('check-models'), 'click', async (event) => {
     const button = event.currentTarget;
     const host = document.getElementById('model-list');
     button.disabled = true;
@@ -354,7 +367,7 @@
     }
   });
 
-  document.getElementById('dispatch-now')?.addEventListener('click', async (event) => {
+  wireOnce(document.getElementById('dispatch-now'), 'click', async (event) => {
     const button = event.currentTarget;
     const host = document.getElementById('dispatch-result');
     button.disabled = true;
@@ -387,7 +400,7 @@
     }
   });
 
-  document.getElementById('reset-btn').addEventListener('click', async () => {
+  wireOnce(document.getElementById('reset-btn'), 'click', async () => {
     await store.resetLocal();
     toast('Local data cleared. Re-syncing from the server…', 'warning');
     await sync.syncNow();

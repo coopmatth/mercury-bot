@@ -24,7 +24,10 @@ function updateToggleUI(useLocal) {
   }
 }
 
-if (btnAi && btnLocal) {
+// Idempotent: the router may re-execute this module on navigation.
+if (btnAi && btnLocal && !btnAi.dataset.wired) {
+  btnAi.dataset.wired = '1';
+  btnLocal.dataset.wired = '1';
   btnAi.addEventListener('click', () => updateToggleUI(false));
   btnLocal.addEventListener('click', () => {
     updateToggleUI(true);
@@ -167,7 +170,8 @@ const fileInput = document.getElementById('scanner-files');
 const readBtn = document.getElementById('read-btn');
 const resultsContainer = document.getElementById('scanner-results');
 
-if (scannerForm) {
+if (scannerForm && !scannerForm.dataset.wired) {
+  scannerForm.dataset.wired = '1';
   scannerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!fileInput.files.length) return;
@@ -239,7 +243,9 @@ function renderResult(payload, id, source) {
   resultsContainer.insertAdjacentHTML('afterbegin', itemHtml);
 }
 
-document.addEventListener('click', async (e) => {
+if (!window.__mercuryScannerClickWired) {
+  window.__mercuryScannerClickWired = true;
+  document.addEventListener('click', async (e) => {
   if (e.target.classList.contains('delete-scan-btn')) {
     if (!confirm('Delete this saved scan?')) return;
     const id = e.target.dataset.id;
@@ -252,4 +258,5 @@ document.addEventListener('click', async (e) => {
     navigator.clipboard.writeText(text);
     window.mercury.toast('Copied to clipboard!', 'success');
   }
-});
+  });
+}

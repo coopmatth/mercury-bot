@@ -59,7 +59,10 @@ for (const row of rows) {
 
 refresh();
 
-form.addEventListener('submit', async (event) => {
+// Idempotent: the router may re-execute this module on navigation.
+if (!form.dataset.wired) {
+  form.dataset.wired = '1';
+  form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = document.getElementById('save-btn');
   const items = collect();
@@ -100,22 +103,33 @@ form.addEventListener('submit', async (event) => {
     button.textContent = 'Save job';
     toast(`Could not save: ${error.message}`, 'danger');
   }
-});
+  });
+}
 
-document.getElementById('delete-btn')?.addEventListener('click', async () => {
+const deleteBtn = document.getElementById('delete-btn');
+if (deleteBtn && !deleteBtn.dataset.wired) {
+  deleteBtn.dataset.wired = '1';
+  deleteBtn.addEventListener('click', async () => {
   await removeRow('jobs', form.id.value);
   sessionStorage.setItem(
     'mercury:flash',
     JSON.stringify({ message: 'Job deleted.', kind: 'success' }),
   );
   routerNav('/jobs');
-});
+  });
+}
 
 let dirty = false;
-form.addEventListener('input', () => { dirty = true; });
-form.addEventListener('submit', () => { dirty = false; });
-window.addEventListener('beforeunload', (event) => {
+if (!form.dataset.wiredInput) {
+  form.dataset.wiredInput = '1';
+  form.addEventListener('input', () => { dirty = true; });
+  form.addEventListener('submit', () => { dirty = false; });
+}
+if (!window.__mercuryBeforeUnloadWired) {
+  window.__mercuryBeforeUnloadWired = true;
+  window.addEventListener('beforeunload', (event) => {
   if (!dirty) return;
   event.preventDefault();
   event.returnValue = '';
-});
+  });
+}

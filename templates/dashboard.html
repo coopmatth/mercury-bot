@@ -195,7 +195,12 @@
     note.classList.remove('hidden');
   }
   showPending();
-  document.addEventListener('mercury:synced', showPending);
-  document.addEventListener('mercury:queued', showPending);
+  // Idempotent: the router may re-execute this script on navigation;
+  // document persists, so guard against double-wiring.
+  if (!window.__mercuryDashboardWired) {
+    window.__mercuryDashboardWired = true;
+    document.addEventListener('mercury:synced', showPending);
+    document.addEventListener('mercury:queued', showPending);
+  }
 </script>
 {% endblock %}

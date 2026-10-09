@@ -35,8 +35,12 @@ const humanSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 };
 
-els.files.addEventListener('change', () => {
-  els.button.disabled = els.files.files.length === 0;
+/* Idempotent wiring: the router may re-execute this module on navigation.
+ * Guard all static-element listeners so a tap never fires twice. */
+if (!els.files.dataset.wired) {
+  els.files.dataset.wired = '1';
+  els.files.addEventListener('change', () => {
+    els.button.disabled = els.files.files.length === 0;
   els.button.textContent = els.files.files.length
     ? `Compress ${els.files.files.length} ${els.files.files.length === 1 ? 'photo' : 'photos'}`
     : 'Compress photos';
@@ -44,7 +48,8 @@ els.files.addEventListener('change', () => {
   // is usually ready by the time "Compress" is tapped instead of blocking
   // the batch on a cold GPS fix (which was adding 10+ seconds).
   pendingLocate = els.files.files.length ? locateForStamp() : null;
-});
+  });
+}
 
 async function compress(file, maxEdge, quality, stamp) {
   const bitmap = await createImageBitmap(file);
@@ -254,7 +259,9 @@ async function saveOne(output) {
   }
 }
 
-els.button.addEventListener('click', async () => {
+if (!els.button.dataset.wired) {
+  els.button.dataset.wired = '1';
+  els.button.addEventListener('click', async () => {
   const [edge, quality] = els.preset.value.split(':');
   els.button.disabled = true;
   els.button.textContent = 'Compressing…';
@@ -318,9 +325,12 @@ els.button.addEventListener('click', async () => {
   toast(`Compressed ${outputs.length} ${outputs.length === 1 ? 'photo' : 'photos'}.`, 'success');
   els.button.disabled = false;
   els.button.textContent = 'Compress photos';
-});
+  });
+}
 
-els.downloadAll.addEventListener('click', async () => {
+if (!els.downloadAll.dataset.wired) {
+  els.downloadAll.dataset.wired = '1';
+  els.downloadAll.addEventListener('click', async () => {
   if (!outputs.length) return;
 
   // Inside the packaged app, save straight to the camera roll. WKWebView
@@ -356,4 +366,5 @@ els.downloadAll.addEventListener('click', async () => {
     }
   }
   outputs.forEach((o, i) => setTimeout(() => saveBlob(o.blob, o.name), i * 220));
-});
+  });
+}

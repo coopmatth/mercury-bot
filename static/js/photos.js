@@ -12,6 +12,7 @@
  * is drawn into the image itself, upper-right, so it survives any upload. */
 
 import { toast, buzz } from './app.js';
+import { photoChecklist } from './photo-reqs.js';
 import { isNativeApp, savePhotos, getNativeLocation } from './native.js';
 
 const els = {
@@ -28,6 +29,61 @@ const els = {
 };
 
 let outputs = [];
+
+/* Job handoff: the Log-a-job form stashes the just-saved job here so the
+   compressor can show exactly which photos that work order needs. */
+let photoJob = null;
+try {
+  const raw = sessionStorage.getItem('mercury:photo-job');
+  if (raw) {
+    photoJob = JSON.parse(raw);
+    sessionStorage.removeItem('mercury:photo-job');
+  }
+} catch { /* malformed — ignore */ }
+
+function renderChecklist(job) {
+  const card = document.getElementById('photo-checklist');
+  const title = document.getElementById('checklist-title');
+  const meta = document.getElementById('checklist-meta');
+  const list = document.getElementById('checklist-items');
+  if (!card || !list || !job) return;
+  const photos = job.photos || photoChecklist(job.items || {});
+  if (!photos.length) return;
+  title.textContent = 'Photos needed — ' + photos.length;
+  meta.textContent = [
+    job.workOrderId ? 'WO ' + job.workOrderId : null,
+    job.address || null,
+    job.total || null,
+  ].filter(Boolean).join(' · ');
+  list.innerHTML = '';
+  photos.forEach((p) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="ck-code"></span><span class="ck-name"></span>';
+    li.querySelector('.ck-code').textContent = p.code;
+    li.querySelector('.ck-name').textContent = p.name;
+    list.appendChild(li);
+  });
+  card.classList.remove('hidden');
+}
+
+if (photoJob && photoJob.photos && photoJob.photos.length) {
+  renderChecklist(photoJob);
+} else {
+  const jobId = new URLSearchParams(window.location.search).get('job');
+  if (jobId) {
+    import('./store.js').then((m) => m.get('jobs', jobId)).then((job) => {
+      if (job) {
+        photoJob = {
+          jobId: job.id,
+          workOrderId: job.order_number || String(job.id).slice(0, 8),
+          address: job.address,
+          items: job.items,
+        };
+        renderChecklist(photoJob);
+      }
+    }).catch(() => {});
+  }
+}
 
 const humanSize = (bytes) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -189,7 +245,9 @@ function formatStampDate(date) {
  * stamp = { takenAt: Date, address: {street, cityLine} | null,
  *           coords: {latitude, longitude} | null } */
 function stampPhoto(ctx, width, height, stamp) {
-  const lines = [formatStampDate(stamp.takenAt), ''];
+  const lines = [formatStampDate(stamp.takenAt)];
+  if (stamp.workOrderId) lines.push(`WO ${stamp.workOrderId}`);
+  lines.push('');
   if (stamp.address && (stamp.address.street || stamp.address.cityLine)) {
     if (stamp.address.street) lines.push(stamp.address.street);
     if (stamp.address.cityLine) lines.push(stamp.address.cityLine);
@@ -290,7 +348,7 @@ if (!els.button.dataset.wired) {
       // capture time, and stamped a seemingly random time.
       const takenAt = new Date();
       outputs.push(await compress(file, Number(edge), Number(quality),
-        { takenAt, address, coords }));
+        { takenAt, address, coords, workOrderId: photoJob?.workOrderId || null }));
     }
   } catch (error) {
     toast(`Could not compress: ${error.message}`, 'danger');

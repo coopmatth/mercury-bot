@@ -7,14 +7,14 @@ from mercury.rates import (FOOTAGE_ITEMS, NEW_RATE_CARD, RATE_ALIASES,
                            PAY_RATES)
 
 
-def test_card_has_9_items_and_nothing_tiered():
-    assert len(NEW_RATE_CARD) == 9
-    assert len(rate_table()) == 9
+def test_card_has_10_items_and_nothing_tiered():
+    assert len(NEW_RATE_CARD) == 10
+    assert len(rate_table()) == 10
     assert not any(r["tiered"] for r in rate_table())
 
 
 def test_rate_card_version_is_stamped():
-    assert RATE_CARD_VERSION == "2026-10-03-sub-inhome-9"
+    assert RATE_CARD_VERSION == "2026-10-16-sub-inhome-10"
 
 
 def test_flat_rates_multiply():

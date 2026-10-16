@@ -11,10 +11,11 @@ export const PHOTO_REQS = {
   'D8': ['Splice case (if in terminal)', 'Power meter showing passing light at NID'],
   'D11': ['Path of drop', 'Beginning of temp drop', 'End of temp drop'],
   'D10': [],
+  'TC1': ['Speedtest', 'Light level at NID and ONT'],
 };
 
 export function codeOf(itemName) {
-  const m = /^(R1|A1|D2|D6|D5|D7|D8|D11|D10)\b/.exec(itemName || '');
+  const m = /^(R1|A1|D2|D6|D5|D7|D8|D11|D10|TC1)\b/.exec(itemName || '');
   return m ? m[1] : null;
 }
 

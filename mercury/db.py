@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS rates (
 # Seeded into `rates` the first time the table is empty, and wholesale-replaced
 # whenever RATE_CARD_VERSION changes (see init_db). Kept in step with
 # rates.py's NEW_RATE_CARD, which is the source of truth.
-RATE_CARD_VERSION = "2026-10-03-sub-inhome-9"
+RATE_CARD_VERSION = "2026-10-16-sub-inhome-10"
 DEFAULT_RATE_CARD = [
     ("R1 – Residential Installation", 70.00, "ea", 0, 1),
     ("D8 – Drop Splice (Terminal & NID)", 15.00, "ea", 0, 2),
@@ -121,6 +121,7 @@ DEFAULT_RATE_CARD = [
     ("D10 – Truck Roll / Trip Fee", 25.00, "ea", 0, 7),
     ("A1 – Hang Overhead Drop", 0.40, "ft", 0, 8),
     ("D2 – Direct Bury Flat Drop", 0.60, "ft", 0, 9),
+    ("TC1 – Service/Repair Call", 37.50, "ea", 0, 10),
 ]
 
 SYNC_TABLES = {

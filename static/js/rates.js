@@ -50,6 +50,7 @@ export let RATES = {
   'D10 – Truck Roll / Trip Fee': 25.0,
   'A1 – Hang Overhead Drop': 0.4,
   'D2 – Direct Bury Flat Drop': 0.6,
+  'TC1 – Service/Repair Call': 37.5,
 };
 
 /* Pre-card-swap (2026-09-27) names -> current names. Jobs saved under the

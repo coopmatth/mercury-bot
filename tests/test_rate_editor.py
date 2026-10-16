@@ -8,13 +8,13 @@ import pytest
 def test_rates_table_is_seeded_on_init(ctx):
     from mercury.rates import rate_table
     rows = rate_table()
-    assert len(rows) == 9
+    assert len(rows) == 10
     assert {r["item"] for r in rows} == {
         "R1 – Residential Installation", "D8 – Drop Splice (Terminal & NID)",
         "D7 – Place NID Housing w/ Riser", "D11 – UG Temp Drop",
         "D6 – Pull Through Existing Conduit", "D5 – Sidewalk Bore",
         "D10 – Truck Roll / Trip Fee", "A1 – Hang Overhead Drop",
-        "D2 – Direct Bury Flat Drop",
+        "D2 – Direct Bury Flat Drop", "TC1 – Service/Repair Call",
     }
 
 

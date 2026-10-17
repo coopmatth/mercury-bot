@@ -448,6 +448,7 @@ table.data td.num { text-align: right; font-variant-numeric: tabular-nums; }
   z-index: 20;
 }
 .total-bar {
+  flex-wrap: wrap;
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px; margin-bottom: 10px;
   border-radius: var(--radius);
@@ -456,6 +457,7 @@ table.data td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .total-bar .label { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-dim); }
 .total-bar .value { font-size: 25px; font-weight: 800; color: var(--success); letter-spacing: -.02em; }
+.photo-count { flex-basis: 100%; font-size: 13px; font-weight: 600; color: var(--warning, #f59e0b); margin-top: 6px; }
 
 .code-block {
   width: 100%; min-height: 300px;

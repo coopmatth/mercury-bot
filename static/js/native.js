@@ -123,16 +123,36 @@ export async function openFile(blob, filename) {
  * plugin method.
  * @returns {Promise<{latitude:number,longitude:number,accuracy:number|null}>}
  */
-export async function getNativeLocation() {
+export async function getNativeLocation(opts = {}) {
   const plugin = nativePlugin();
-  if (!plugin || typeof plugin.getLocation !== 'function') {
-    throw new Error('Location needs the Mercury iOS app with the location update installed.');
+  if (plugin && typeof plugin.getLocation === 'function') {
+    try {
+      const result = await plugin.getLocation({});
+      const latitude = Number(result?.latitude);
+      const longitude = Number(result?.longitude);
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+        return { lat: latitude, lng: longitude, latitude, longitude, accuracy: Number(result.accuracy) || null };
+      }
+    } catch (e) { /* fall through to browser */ }
   }
-  const result = await plugin.getLocation({});
-  const latitude = Number(result?.latitude);
-  const longitude = Number(result?.longitude);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    throw new Error('The app returned an empty location.');
+  if (!navigator.geolocation) {
+    throw new Error('Location is not available here — use the Mercury app.');
   }
-  return { latitude, longitude, accuracy: Number(result.accuracy) || null };
+  const timeout = opts.timeout || 20000;
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => { if (!done) { done = true; reject(new Error('Location timed out.')); } }, timeout);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (done) return; done = true; clearTimeout(timer);
+        resolve({
+          lat: pos.coords.latitude, lng: pos.coords.longitude,
+          latitude: pos.coords.latitude, longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy || null,
+        });
+      },
+      () => { if (!done) { done = true; clearTimeout(timer); reject(new Error('Location permission denied.')); } },
+      { enableHighAccuracy: true, timeout: timeout, maximumAge: 0 }
+    );
+  });
 }

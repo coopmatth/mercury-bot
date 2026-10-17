@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import date, datetime, timedelta
 
 from .config import Config
@@ -278,6 +279,81 @@ def delete_scan(scan_id: str, device_id: str = "") -> bool:
         cur = conn.execute(
             "UPDATE equipment_scans SET deleted = 1, updated_at = ?, seq = ?, device_id = ? WHERE id = ?",
             (utcnow(), seq, device_id, scan_id),
+        )
+    return cur.rowcount > 0
+
+# ---------------------------------------------------------- field maps ----
+# Device-local field maps (pins + measured routes drawn on a map). Deliberately
+# NOT in SYNC_TABLES: they're working sketches tied to the device that drew
+# them, and the sync protocol only carries jobs / custom items / scans.
+
+def _fieldmap_dict(row: sqlite3.Row) -> dict:
+    data = row_to_dict(row)
+    try:
+        data["data"] = json.loads(data.get("data") or "{}")
+    except (ValueError, TypeError):
+        data["data"] = {}
+    return data
+
+
+def list_fieldmaps() -> list[dict]:
+    rows = get_db().execute(
+        "SELECT * FROM fieldmaps WHERE deleted = 0 "
+        "ORDER BY updated_at DESC").fetchall()
+    return [_fieldmap_dict(r) for r in rows]
+
+
+def get_fieldmap(fm_id: str) -> dict | None:
+    row = get_db().execute(
+        "SELECT * FROM fieldmaps WHERE id = ? AND deleted = 0",
+        (fm_id,)).fetchone()
+    return _fieldmap_dict(row) if row else None
+
+
+def save_fieldmap(payload: dict, device_id: str = "") -> dict:
+    conn = get_db()
+    fm_id = (payload.get("id") or "").strip() or new_id()
+    now = utcnow()
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    # Keep the stored blob small and predictable.
+    data = {
+        "pins": data.get("pins") or [],
+        "routes": data.get("routes") or [],
+    }
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO fieldmaps (id, name, job_id, data, notes, created_at,
+                                   updated_at, deleted, device_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name, job_id=excluded.job_id, data=excluded.data,
+                notes=excluded.notes, updated_at=excluded.updated_at,
+                deleted=0, device_id=excluded.device_id
+            """,
+            (
+                fm_id,
+                (payload.get("name") or "Untitled map").strip()[:120],
+                (payload.get("job_id") or "").strip(),
+                json.dumps(data),
+                (payload.get("notes") or "").strip(),
+                payload.get("created_at") or now,
+                now,
+                device_id,
+            ),
+        )
+    return get_fieldmap(fm_id)
+
+
+def delete_fieldmap(fm_id: str, device_id: str = "") -> bool:
+    conn = get_db()
+    with conn:
+        cur = conn.execute(
+            "UPDATE fieldmaps SET deleted = 1, updated_at = ?, device_id = ? "
+            "WHERE id = ?",
+            (utcnow(), device_id, fm_id),
         )
     return cur.rowcount > 0
 
